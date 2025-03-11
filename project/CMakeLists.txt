@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 
 project(Codec63
-    VERSION 3.0
-    DESCRIPTION "CMake configuration file for Codec63 in CUDA"
+  VERSION 3.0
+  DESCRIPTION "CMake configuration file for Codec63 in CUDA"
     LANGUAGES CUDA C)
 
 # if(NOT CMAKE_C_COMPILER_ID STREQUAL GNU)
@@ -12,10 +12,12 @@ project(Codec63
 # Use CUDA standard (project-wide setting)
 set(CMAKE_CUDA_STANDARD 11)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Overwrite default -O3 flag for Release mode
 set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize")
-set(CMAKE_C_FLAGS_DEBUG "-ggdb3 -G -O1 -fno-tree-vectorize -DNDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-ggdb3 -pg -G -O1 -fno-tree-vectorize -DNDEBUG")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --compiler-options -pg -pg")
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
