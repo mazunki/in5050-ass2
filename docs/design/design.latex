@@ -1,0 +1,81 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[a4paper]{geometry}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{titlesec}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{xstring}
+\usepackage{xparse}
+\usepackage{hyperref}
+\usepackage{parskip}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=blue,
+    linkcolor=blue,
+    citecolor=blue,
+    breaklinks=true,
+}
+\usepackage{url}
+\usepackage[backend=biber]{biblatex}
+\addbibresource{references.bib}
+
+\usepackage{listings}
+
+\definecolor{light-gray}{gray}{0.95}
+\lstset{
+                breaklines=true,
+                backgroundcolor=\color{light-gray},
+                xleftmargin=.05in,
+                xrightmargin=.05in}
+
+\NewDocumentCommand{\code}{v}{\texttt{\detokenize{#1}}}
+\newcommand{\us}{\ensuremath{\mu\text{s}}}
+\newcommand{\ms}{\ensuremath{\text{ms}}}
+\newcommand{\secs}{\ensuremath{\text{s}}}
+
+\author{\{liseej,rolfvh\}@uio.no}
+\date{2025-03-11}
+\title{Design Review: Exploring Optimizations for Codec63 Encoder Using ARM NEON and NVIDIA Tegra Xavier}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+This document outlines our strategies for exploring potential enhancements of the Codec63 video encoder, utilizing ARM NEON SIMD instructions alongside the NVIDIA Tegra Xavier's architecture to potentially exploit parallel processing capabilities.
+
+\section{Optimization Techniques}
+\subsection{Computational Optimizations}
+\paragraph{NEON SIMD}
+It seems likely, and most relevant for the assignment, that modifying both DCT and iDCT operations by vectorizing them to process multiple data points simultaneously could significantly accelerate these computationally intense parts of the encoder. First, this involves running several iterations at once by replacing the current calls with vectorized replacements on full cachelines, but we also suspect that applying loop unrolling and function inlining might reduce the overhead and increase the data throughput even further.
+
+\paragraph{Optimizing with the Integrated GPU}
+Given the integrated GPU architecture of the NVIDIA Tegra Xavier, we have the opportunity to utilize this resource without the typical overhead associated with discrete GPUs. The shared memory architecture facilitates efficient data handling where both the CPU and GPU can access data without the need for copying or transferring data across different memory pools. This setup is particularly advantageous for tasks that can benefit from parallel processing capabilities of the GPU, such as certain stages of video processing and complex mathematical computations involved in video encoding.
+
+\paragraph{Pipelining and Instruction Scheduling}
+We hope that manual instruction scheduling might maximize pipeline utilization. This technique could help in optimizing the execution sequence to potentially reduce pipeline stalls, especially beneficial for the SIMD-optimized sections of our code.
+
+\subsection{Memory and Data Management}
+\paragraph{Memory Optimization}
+Efficient memory management is pivotal. By aligning data to 16-byte boundaries, we facilitate potentially more efficient SIMD operations. While it seems like most of the alignment work is already done for us by the nature of the assignment, and the precode given to us, we do suspect that implementing cache blocking techniques could improve cache utilization and minimize cache misses.
+
+\paragraph{Data Cache Optimizations (DCO)}
+We are considering optimizing data cache usage by ensuring that frequently accessed data, such as DCT coefficients, is strategically placed to potentially reduce cache miss rates. We might be able to cache entire macroblock calculations if we aren't limited by memory? Prefetching data ahead of time could reduce delays in data retrieval, optimizing our use of the memory buffers and buses.
+
+\subsection{Parallel Processing and Hybrid Computing}
+\paragraph{Thread-Level Optimizations}
+Although our primary focus is on SIMD optimizations, we are considering implementing multithreading in parts of the encoder that handle tasks like I/O operations, which do not benefit directly from SIMD but could be processed concurrently to enhance overall efficiency.
+
+\section{Required Code Adaptations}
+In transitioning our video encoding system to fully utilize the NVIDIA Tegra Xavier SoC, some code adaptations are required since we are now living under an integrated GPU architecture where we have a unified memory layout. While the SoC is capable of using both its CPU cores and its GPU cores in parallel, they do share the same memory buses, L2 caches, and scheduler.
+
+The change in memory layout does simplify the memory management model by eliminating the need for explicit \code{cudaMemcpy} operations between the CPU and GPU. Our existing memory transfers in the encoder, particularly those in the motion estimation and compensation modules, should be refactored to adopt zero-copy memory accesses. This approach allows the CPU and GPU to access data seamlessly without the overhead of data duplication, which is crucial for reducing latency and enhancing throughput.
+
+
+\section{Conclusion}
+This design review tentatively outlines a strategy that leverages both software and hardware techniques to explore significant performance improvements in the Codec63 encoder on the Tegra Xavier platform. Our approach is geared towards exploiting every aspect of the device's architecture, from SIMD instructions to GPU computing, hoping to achieve substantial improvements in video encoding efficiency.
+
+\end{document}
+
