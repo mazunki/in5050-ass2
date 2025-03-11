@@ -35,7 +35,7 @@
 
 
 \author{\{liseej, rolfvh\}@uio.no}
-\date{2025-02-06}
+\date{2025-03-02}
 \title{Home exam 1 \\ {\large Codec63 Encoder on CUDA --- IN5050}}
 
 \usepackage{graphicx}
@@ -222,7 +222,7 @@ Our implementation is far from perfect. We have a few ideas in mind which we did
 \section{Conclusion}
 We consider our task a success, but we do believe further improvements could benefit us. There is not too much to gain in our case from relying on the compiler's optimization flags, because the task is a bit more complex than what generic compiler algorithms know how to speed up due to the data dependency requirement which is in the spec of YUV and is thus our responsibility.
 
-Most of the information related to this report can be found on GitHub (\code{mazunki/in5050-ass1}\nocite{github}) at the \code{neo} branch.
+Most of the information related to this report can be found on GitHub (\code{mazunki/in5050-ass1}\nocite{github}) at the \code{neo} branch. You can find the specific reports from the profiler under \code{docs/report/assets/*.nsys-rep}
 
 \printbibliography
 
