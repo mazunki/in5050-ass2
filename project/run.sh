@@ -2,16 +2,18 @@
 set -eu
 
 PROJECT_USER=in5050-g01
-PROJECT_ROOT="/home/${PROJECT_USER}/in5050-ass1/project"
+PROJECT_ROOT="/home/${PROJECT_USER}/in5050-ass2/project"
 SRC_DIR="${PROJECT_ROOT}/src"
 BUILD_DIR="${PROJECT_ROOT}/build"
 WORKDIR="${PROJECT_ROOT}/workdir"
 
-ASSETS_DIR="/home/in5050-g01/assets"
+ASSETS_DIR="/mnt/sdcard/cipr"
 REPORT_FILE="report.nsys-rep"
 
-BUILDER="${BUILDER:-${PROJECT_USER}@in5050}"
-RUNNER="${RUNNER:-${PROJECT_USER}@in5050-2016-10}"
+# BUILDER="${BUILDER:-${PROJECT_USER}@in5050}"
+# RUNNER="${RUNNER:-${PROJECT_USER}@in5050-2016-10}"
+BUILDER="${BUILDER:-${PROJECT_USER}@tegra-3}"
+RUNNER="${RUNNER:-${PROJECT_USER}@tegra-3}"
 BUILD_MODE="${BUILD_MODE:-Debug}"
 
 VID_HEIGHT="288"
@@ -37,6 +39,7 @@ runner() {
 
 pipeline() {
 	echo "[PIPELINE] Updating build server..."
+	runner "mkdir -p '${WORKDIR}'"
 	(set -x; rsync -av --progress . "${BUILDER}:${PROJECT_ROOT}/")
 
 	echo "[PIPELINE] updating cmake..."
@@ -64,7 +67,7 @@ pipeline() {
 
 
 	echo "[PIPELINE] encoding..."
-	runner "cd '${WORKDIR}' && nsys profile -o '${REPORT_FILE_ENC}' -- ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
+	runner "cd '${WORKDIR}' && nsys profile --output '${REPORT_FILE_ENC}' ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
 
 	echo "[PIPELINE] decoding..."
 	# runner "cd '${WORKDIR}' && nsys profile -o '${REPORT_FILE_DEC}' -- ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }
