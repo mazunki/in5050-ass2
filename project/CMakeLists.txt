@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.14)
 project(Codec63
 	VERSION 3.0
 	DESCRIPTION "CMake configuration file for Codec63 in C"
-  LANGUAGES C CUDA)
+  LANGUAGES CUDA C)
 
 # Use the C standard from 2011. No effect on Windows (Visual Studio ignores
 # the standards anyway).
@@ -20,6 +20,9 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize")
 # Make sure Debug mode flags are similar to Release mode flags
 set(CMAKE_C_FLAGS_DEBUG "-g -O1 -fno-tree-vectorize")
+
+set(CMAKE_CUDA_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # CMake configures Makefiles for discrete GPUs, but it doesn't do it
 # for integrated GPUs like the Tegra. Pick the right compute capabilities
@@ -42,19 +45,12 @@ endif()
 set(CMAKE_BUILD_TYPE Debug)
 # set(CMAKE_BUILD_TYPE Release)
 
-#
-# If this is a Tegra or something similar, set our processor subrevision.
-# On Mac, CMake adds arch flags by itself.
-#
 if(CMAKE_C_COMPILER_ID STREQUAL GNU)
   if(EXISTS "/etc/nv_tegra_release")
-    add_compile_options(-march=armv8.2-a)
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:-march=armv8.2-a>)
   endif()
 else()
-  if(EXISTS "/etc/nv_tegra_release")
-    # add_compile_options(-Xcompiler -march=armv8.2-a)
-    add_compile_options(<<<COMPILE_LANGUAGE:C>:-march=armv8.2-a>)
-  endif()
+  message(FATAL "Not compiling with an gcc")
 endif()
 
 # This march option works with GCC but apparently not with the CUDA compiler on Tegra
@@ -64,15 +60,13 @@ endif()
 
 include_directories(include)
 
-add_library(c63 STATIC)
-target_sources(c63 PRIVATE
-            src/quantdct.c
-            src/tables.cu
-            src/io.cu
-            src/common.cu
-            src/me.cu)
-set_source_files_properties(src/quantdct.c PROPERTIES LANGUAGE C)
-
+add_library(c63 STATIC
+            src/quantdct.c include/quantdct.h
+            src/tables.cu include/tables.h
+            src/io.cu include/io.h
+            src/common.cu include/common.h
+            src/me.cu include/me.h)
+target_compile_options(c63 PUBLIC -I${CMAKE_SOURCE_DIR}/include)
 
 add_executable(c63enc
                src/c63enc.cu include/c63.h
@@ -88,4 +82,13 @@ add_executable(c63pred
 target_link_libraries(c63pred c63 m)
 target_compile_options(c63pred PUBLIC -DC63_PRED)
 
+
+# if(EXISTS "/etc/nv_tegra_release")
+#   if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+#     target_compile_options(c63 PRIVATE -Xcompiler=-march=armv8.2-a)
+#     target_compile_options(c63enc PRIVATE -Xcompiler=-march=armv8.2-a)
+#     target_compile_options(c63dec PRIVATE -Xcompiler=-march=armv8.2-a)
+#     target_compile_options(c63pred PRIVATE -Xcompiler=-march=armv8.2-a)
+#   endif()
+# endif()
 
