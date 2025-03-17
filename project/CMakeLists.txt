@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.14)
 project(Codec63
 	VERSION 3.0
 	DESCRIPTION "CMake configuration file for Codec63 in C"
-  LANGUAGES CXX CUDA)
+  LANGUAGES C CUDA)
 
 # Use the C standard from 2011. No effect on Windows (Visual Studio ignores
 # the standards anyway).
@@ -53,6 +53,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL GNU)
 else()
   if(EXISTS "/etc/nv_tegra_release")
     # add_compile_options(-Xcompiler -march=armv8.2-a)
+    add_compile_options(<<<COMPILE_LANGUAGE:C>:-march=armv8.2-a>)
   endif()
 endif()
 
@@ -63,12 +64,15 @@ endif()
 
 include_directories(include)
 
-add_library(c63 STATIC
-            src/quantdct.cpp include/quantdct.h
-            src/tables.cu include/tables.h
-            src/io.cu include/io.h
-            src/common.cu include/common.h
-            src/me.cu include/me.h)
+add_library(c63 STATIC)
+target_sources(c63 PRIVATE
+            src/quantdct.c
+            src/tables.cu
+            src/io.cu
+            src/common.cu
+            src/me.cu)
+set_source_files_properties(src/quantdct.c PROPERTIES LANGUAGE C)
+
 
 add_executable(c63enc
                src/c63enc.cu include/c63.h
