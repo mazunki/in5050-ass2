@@ -93,12 +93,12 @@ struct c63_pipeline {
   uint8_t *d_recons_Y, *d_recons_U, *d_recons_V;
   uint8_t *d_refframe_Y, *d_refframe_U, *d_refframe_V;
   uint8_t *d_predicted_Y, *d_predicted_U, *d_predicted_V;
-  macroblock *d_mbs[COLOR_COMPONENTS];
+  struct macroblock *d_mbs[COLOR_COMPONENTS];
 
   yuv_t *h_refframe, *h_recons;  // note that these pointers are swapped each frame
   yuv_t *h_predicted;
   dct_t *h_residuals;
-  macroblock *h_mbs[COLOR_COMPONENTS];
+  struct macroblock *h_mbs[COLOR_COMPONENTS];
 
 #ifdef __CUDACC__ // CUDA contexts
   cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
