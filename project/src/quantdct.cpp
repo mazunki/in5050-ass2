@@ -13,6 +13,9 @@
 #include "common.h"
 #include "tables.h"
 
+#include <arm_neon.h>
+
+
 #define ISQRT2 0.70710678118654f
 
 static void dct_2d( const float* in, float* out )

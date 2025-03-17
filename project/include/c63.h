@@ -100,9 +100,11 @@ struct c63_pipeline {
   dct_t *h_residuals;
   macroblock *h_mbs[COLOR_COMPONENTS];
 
+#ifdef __CUDACC__ // CUDA contexts
   cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
   cudaStream_t stream_compensate_Y, stream_compensate_U, stream_compensate_V;
   cudaStream_t stream_macroblocks, stream_predictions, stream_image;
+#endif
 };
 
 struct c63_common
