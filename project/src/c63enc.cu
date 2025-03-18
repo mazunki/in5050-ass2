@@ -122,18 +122,22 @@ static void c63_encode_image(struct c63_common *cm)
     c63_motion_compensate(cm);
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_compensate_Y));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->Y, pipe->d_predicted_Y, cm->luma_size, cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->Y, pipe->d_predicted_Y, cm->luma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_Y));
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_compensate_U));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->U, pipe->d_predicted_U, cm->chroma_size, cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->U, pipe->d_predicted_U, cm->chroma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_Y));
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_compensate_V));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->V, pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->V, pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_Y));
   }
 
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_Y));
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_U));
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_V));
+
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_Y));
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_U));
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_V));
 
   /** quantize (slow CPU-only function)
    *   @param[in]  orig
