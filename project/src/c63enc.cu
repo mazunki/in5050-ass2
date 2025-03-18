@@ -77,7 +77,6 @@ static void c63_encode_image(struct c63_common *cm)
 
   cm->curframe = prepare_next_frame(cm);
 
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
 
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
   {
@@ -90,19 +89,20 @@ static void c63_encode_image(struct c63_common *cm)
 
   if (!cm->curframe->keyframe)
   {
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_Y, cm->refframe->recons->Y, cm->luma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_U, cm->refframe->recons->U, cm->chroma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_V, cm->refframe->recons->V, cm->chroma_size, cudaMemcpyHostToDevice));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_refframe_Y, cm->refframe->recons->Y, cm->luma_size, cudaMemcpyHostToDevice, pipe->stream_image));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_refframe_U, cm->refframe->recons->U, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_refframe_V, cm->refframe->recons->V, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
 
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_orig_Y, cm->curframe->orig->Y, cm->luma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_orig_U, cm->curframe->orig->U, cm->chroma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_orig_V, cm->curframe->orig->V, cm->chroma_size, cudaMemcpyHostToDevice));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_orig_Y, cm->curframe->orig->Y, cm->luma_size, cudaMemcpyHostToDevice, pipe->stream_image));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_orig_U, cm->curframe->orig->U, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_orig_V, cm->curframe->orig->V, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
 
     /** Motion Estimation
      *   @param[in]  d_orig
      *   @param[in]  d_ref
      *   @param[out] d_mbs
      */
+    CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
     c63_motion_estimate(cm);
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_estimate_Y));
