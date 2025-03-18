@@ -66,8 +66,14 @@ struct c63_pipeline* c63_pipeline_init(size_t frame_size, size_t chroma_size, si
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_compensate_U));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_compensate_V));
 
-  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_macroblocks));
-  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_predictions));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_macroblocks_Y));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_macroblocks_U));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_macroblocks_V));
+
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_predictions_Y));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_predictions_U));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_predictions_V));
+
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_image));
 
   return pipe;
@@ -124,8 +130,14 @@ void c63_pipeline_free(struct c63_pipeline *pipe)
   CUDA_ASSERT(cudaStreamDestroy(pipe->stream_compensate_U));
   CUDA_ASSERT(cudaStreamDestroy(pipe->stream_compensate_V));
 
-  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_macroblocks));
-  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_predictions));
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_macroblocks_Y));
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_macroblocks_U));
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_macroblocks_V));
+
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_predictions_Y));
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_predictions_U));
+  CUDA_ASSERT(cudaStreamDestroy(pipe->stream_predictions_V));
+
   CUDA_ASSERT(cudaStreamDestroy(pipe->stream_image));
 }
 

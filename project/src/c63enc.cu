@@ -106,13 +106,13 @@ static void c63_encode_image(struct c63_common *cm)
     c63_motion_estimate(cm);
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_estimate_Y));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[Y_COMPONENT], pipe->d_mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], pipe->d_mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_Y));
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_estimate_U));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[U_COMPONENT], pipe->d_mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[U_COMPONENT], pipe->d_mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_Y));
 
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_estimate_V));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[V_COMPONENT], pipe->d_mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[V_COMPONENT], pipe->d_mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_Y));
 
     /** Motion Compensation (gpu function)
      *   @param[in]  d_mbs
@@ -130,6 +130,10 @@ static void c63_encode_image(struct c63_common *cm)
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_compensate_V));
     CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->V, pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost));
   }
+
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_Y));
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_U));
+  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_V));
 
   /** quantize (slow CPU-only function)
    *   @param[in]  orig
