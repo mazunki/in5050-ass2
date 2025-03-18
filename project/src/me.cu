@@ -72,22 +72,23 @@ __host__ void c63_motion_estimate(struct c63_common *cm)
 
   c63_pipeline *pipe = cm->pipe;
 
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
-
   c63_motion_estimate_kernel<<<grid_size_luma, block_size, 0, pipe->stream_estimate_Y>>>(pipe->d_orig_Y, pipe->d_refframe_Y, pipe->d_mbs[Y_COMPONENT], Y_COMPONENT);
   CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_Y, pipe->stream_estimate_Y));
 
   c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_U>>>(pipe->d_orig_U, pipe->d_refframe_U, pipe->d_mbs[U_COMPONENT], U_COMPONENT);
   CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_U, pipe->stream_estimate_U));
 
   c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_V>>>(pipe->d_orig_V, pipe->d_refframe_V, pipe->d_mbs[V_COMPONENT], V_COMPONENT);
   CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_V, pipe->stream_estimate_V));
 
 }
 
 /**
  * @brief Sums up the Sum of Absolute Difference between two blocks.
- * 
+ *
  * This value can then be used to pick the best match for any given
  * macroblock during motion estimation.
  */
@@ -212,13 +213,15 @@ __host__ void c63_motion_compensate(struct c63_common *cm)
 
   c63_motion_compensate_kernel<<<grid_size_luma, block_size, 0, pipe->stream_compensate_Y>>>(pipe->d_mbs[Y_COMPONENT], pipe->d_predicted_Y, pipe->d_refframe_Y, Y_COMPONENT);
   CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_compensate_Y, pipe->stream_compensate_Y));
 
   c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_compensate_U>>>(pipe->d_mbs[U_COMPONENT], pipe->d_predicted_U, pipe->d_refframe_U, U_COMPONENT);
   CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_compensate_U, pipe->stream_compensate_U));
 
   c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_compensate_V>>>(pipe->d_mbs[V_COMPONENT], pipe->d_predicted_V, pipe->d_refframe_V, V_COMPONENT);
   CUDA_CHECK();
-
+  CUDA_ASSERT(cudaEventRecord(pipe->event_compensate_V, pipe->stream_compensate_V));
 }
 
 __global__ void c63_motion_compensate_kernel(struct macroblock *d_mbs, uint8_t *d_predicted, uint8_t *d_ref, int comp)
