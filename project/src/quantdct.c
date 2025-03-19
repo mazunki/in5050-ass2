@@ -15,20 +15,39 @@
 
 #define ISQRT2 0.70710678118654f
 
+
 static void dct_2d(const float *in, float *out) {
-  // Loop through all elements of the block
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      /* Compute the DCT */
-      float dct = 0;
+      float dct = 0.0f;
+
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
-        for (int x = 0; x < MACROBLOCK_SIZE; x++) {
-          dct +=
-              in[y * MACROBLOCK_SIZE + x] * dctlookup[x][u] * dctlookup[y][v];
-        }
+        float32x4_t dct_y_vec = vdupq_n_f32(dctlookup[y][v]);
+
+        float32x4_t in_vec1 =
+            vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE]);
+        float32x4_t dct_x_vec1 = {dctlookup[0][u], dctlookup[1][u],
+                                  dctlookup[2][u], dctlookup[3][u]};
+
+        float32x4_t in_vec2 =
+            vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE + 4]);
+        float32x4_t dct_x_vec2 = {dctlookup[4][u], dctlookup[5][u],
+                                  dctlookup[6][u], dctlookup[7][u]};
+
+        float32x4_t mul_vec1 = vmulq_f32(in_vec1, dct_x_vec1);
+        float32x4_t mul_sum1 = vmulq_f32(mul_vec1, dct_y_vec);
+
+        float32x4_t mul_vec2 = vmulq_f32(in_vec2, dct_x_vec2);
+        float32x4_t mul_sum2 = vmulq_f32(mul_vec2, dct_y_vec);
+
+        float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
+
+        float32_t sums[4];
+        vst1q_f32(sums, mul_sum);
+        dct += sums[0] + sums[1] + sums[2] + sums[3];
       }
 
-      out[v * 8 + u] = dct;
+      out[v * MACROBLOCK_SIZE + u] = dct;
     }
   }
 }
