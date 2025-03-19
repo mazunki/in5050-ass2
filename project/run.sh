@@ -7,7 +7,8 @@ SRC_DIR="${PROJECT_ROOT}/src"
 BUILD_DIR="${PROJECT_ROOT}/build"
 WORKDIR="${PROJECT_ROOT}/workdir"
 
-ASSETS_DIR="/mnt/sdcard/cipr"
+ASSETS_DIR="/home/${PROJECT_USER}/assets"
+# ASSETS_DIR="/mnt/sdcard/cipr"
 REPORT_FILE="report.nsys-rep"
 
 # BUILDER="${BUILDER:-${PROJECT_USER}@in5050}"
