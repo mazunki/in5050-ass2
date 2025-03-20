@@ -42,23 +42,17 @@ void precompute_dctlookup_values() {
 static void dct_2d(const float *in, float *out) {
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float dct = 0.0f;
+      float32x4_t dct = { 0.0f, 0.0f, 0.0f, 0.0f };
 
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
         float32x4_t in_vec1 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE]);
         float32x4_t in_vec2 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE + 4]);
 
-        float32x4_t mul_sum1 = vmulq_f32(in_vec1, precalcDct[v][u][y][0]);
-        float32x4_t mul_sum2 = vmulq_f32(in_vec2, precalcDct[v][u][y][1]);
-
-        float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
-
-        float32_t sums[4];
-        vst1q_f32(sums, mul_sum);
-        dct += sums[0] + sums[1] + sums[2] + sums[3];
+        dct = vmlaq_f32(dct, in_vec1, precalcDct[v][u][y][0]);
+        dct = vmlaq_f32(dct, in_vec2, precalcDct[v][u][y][1]);
       }
 
-      out[v * MACROBLOCK_SIZE + u] = dct;
+      out[v * MACROBLOCK_SIZE + u] = vaddvq_f32(dct);
     }
   }
 }
@@ -67,21 +61,18 @@ static void dct_2d(const float *in, float *out) {
 static void idct_2d(const float *in, float *out) {
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float dct = 0.0f;
+      float32x4_t dct = {0.0f, 0.0f, 0.0f, 0.0f };
 
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
 
         float32x4_t in_vec1 = vld1q_f32(&in[y * MACROBLOCK_SIZE]);
         float32x4_t in_vec2 = vld1q_f32(&in[y * MACROBLOCK_SIZE + 4]);
 
-        float32x4_t mul_sum1 = vmulq_f32(in_vec1, precalcIdct[v][u][y][0]);
-        float32x4_t mul_sum2 = vmulq_f32(in_vec2, precalcIdct[v][u][y][1]);
-
-        float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
-        dct += vaddvq_f32(mul_sum);
+        dct = vmlaq_f32(dct, in_vec1, precalcIdct[v][u][y][0]);
+        dct = vmlaq_f32(dct, in_vec2, precalcIdct[v][u][y][1]);
       }
 
-      out[v * MACROBLOCK_SIZE + u] = dct;
+      out[v * MACROBLOCK_SIZE + u] = vaddvq_f32(dct);
     }
   }
 }
