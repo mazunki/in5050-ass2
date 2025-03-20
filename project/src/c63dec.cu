@@ -419,7 +419,7 @@ int parse_c63_frame(struct c63_common *cm)
 
 void decode_c63_frame(struct c63_common *cm, FILE *fout)
 {
-  nvtxRangePush("Encode image");
+  nvtxRangePush("Decode image");
 
   if (!cm->curframe->keyframe) {
 
@@ -513,6 +513,7 @@ int main(int argc, char **argv)
   int framenum = 0;
   while(fpeek(fin) != EOF)
   {
+    nvtxRangePush("Decode frame");
     DEBUG("Decoding frame %d", framenum);
     cm->curframe = prepare_next_frame(cm);
 
@@ -521,18 +522,26 @@ int main(int argc, char **argv)
      * @param[out] curframe->mbs
      * @param[out] curframe->height, width, num_blocks_luma, num_blocks_chroma
      */
+    nvtxRangePush("Parse frame");
     parse_c63_frame(cm);
+    nvtxRangePop();
 
+    nvtxRangePush("Copy frame");
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[Y_COMPONENT], cm->curframe->mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[U_COMPONENT], cm->curframe->mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[V_COMPONENT], cm->curframe->mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
+    nvtxRangePop();
 
      /**
      * @param[in]  fin
      * @param[out] curframe->mbs
      */
+    nvtxRangePush("Decode frame");
     decode_c63_frame(cm, fout);
+    nvtxRangePop();
+
     framenum++;
+    nvtxRangePop();
   }
   c63_pipeline_free(cm->pipe);
   free(cm);
