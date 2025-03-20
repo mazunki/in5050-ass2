@@ -67,7 +67,8 @@ pipeline() {
 
 
 	echo "[PIPELINE] encoding..."
-	runner "cd '${WORKDIR}' && nsys profile --output '${REPORT_FILE_ENC}' ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
+	runner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_ENC}' ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
+	# runner "cd '${WORKDIR}' && ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
 
 	echo "[PIPELINE] decoding..."
 	# runner "cd '${WORKDIR}' && nsys profile -o '${REPORT_FILE_DEC}' -- ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }

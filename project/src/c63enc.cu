@@ -15,6 +15,8 @@
 #include "me.h"
 #include "tables.h"
 
+#include <nvToolsExt.h>
+
 static char *output_file, *input_file;
 FILE *outfile;
 
@@ -73,6 +75,8 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm, int fb_index)
 
 static void c63_encode_image(struct c63_common *cm)
 {
+  nvtxRangePush("Encode image");
+
   c63_pipeline *pipe = cm->pipe;
 
   cm->curframe = prepare_next_frame(cm);
@@ -152,18 +156,38 @@ static void c63_encode_image(struct c63_common *cm)
    *   @param[in]  predicted
    *   @param[out] residuals
    */
+  nvtxRangePush("DCT & Quantization");
+  nvtxRangePush("dct Y");
   dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
+  nvtxRangePop(); // dct Y
+
+  nvtxRangePush("dct U");
   dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
+  nvtxRangePop(); // dct U
+
+  nvtxRangePush("dct V");
   dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
+  nvtxRangePop(); // dct V
+  nvtxRangePop(); // DCT & Quantization
 
   /** dequantize (slow CPU-only function)
    *   @param[in]  residuals
    *   @param[in]  predicted
    *   @param[out] recons
    */
+  nvtxRangePush("iDCT & Dequantization");
+  nvtxRangePush("idct Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
+  nvtxRangePop(); // idct Y
+
+  nvtxRangePush("idct U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
+  nvtxRangePop(); // idct U
+
+  nvtxRangePush("idct V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+  nvtxRangePop(); // idct V
+  nvtxRangePop(); // iDCT & Dequantization
 
 
   // we no longer need recons, ready it already
@@ -183,10 +207,14 @@ static void c63_encode_image(struct c63_common *cm)
    *   @param[in]  mb->curframe->mbs
    *   @param[out] cm->e_ctx.fp (write to disk)
    */
-  write_frame(cm);
+   nvtxRangePush("Writing to Disk");
+   write_frame(cm);
+   nvtxRangePop(); // Writing to Disk
 
   ++cm->framenum;
   ++cm->frames_since_keyframe;
+
+  nvtxRangePop(); // encode image
 }
 
 struct c63_common* init_c63_enc(int width, int height)
@@ -366,4 +394,3 @@ int main(int argc, char **argv)
 
   return EXIT_SUCCESS;
 }
-

@@ -71,15 +71,15 @@ target_compile_options(c63 PUBLIC -I${CMAKE_SOURCE_DIR}/include)
 add_executable(c63enc
                src/c63enc.cu include/c63.h
                src/c63_write.cu include/c63_write.h)
-target_link_libraries(c63enc c63 m)
+target_link_libraries(c63enc c63 m nvToolsExt)
 
 add_executable(c63dec
                src/c63dec.cu include/c63.h)
-target_link_libraries(c63dec c63 m)
+target_link_libraries(c63dec c63 m nvToolsExt)
 
 add_executable(c63pred
                src/c63dec.cu include/c63.h)
-target_link_libraries(c63pred c63 m)
+target_link_libraries(c63pred c63 m nvToolsExt)
 target_compile_options(c63pred PUBLIC -DC63_PRED)
 
 
