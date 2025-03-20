@@ -5,11 +5,11 @@ cmake_minimum_required(VERSION 3.14)
 #
 # This tells CMake that your project's name is homeexam-01, and that the programs
 # here are written in C.
-# 
+#
 project(Codec63
-	VERSION 3.0
-	DESCRIPTION "CMake configuration file for Codec63 in C"
-  LANGUAGES CUDA C)
+        VERSION 3.0
+        DESCRIPTION "CMake configuration file for Codec63 in C"
+        LANGUAGES CUDA C)
 
 # Use the C standard from 2011. No effect on Windows (Visual Studio ignores
 # the standards anyway).
@@ -47,7 +47,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 if(CMAKE_C_COMPILER_ID STREQUAL GNU)
   if(EXISTS "/etc/nv_tegra_release")
-    add_compile_options($<$<COMPILE_LANGUAGE:C>:-march=armv8.2-a>)
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:-march=armv8.2-a+fp+fp16+simd>)
   endif()
 else()
   message(FATAL "Not compiling with an gcc")
@@ -91,4 +91,3 @@ target_compile_options(c63pred PUBLIC -DC63_PRED)
 #     target_compile_options(c63pred PRIVATE -Xcompiler=-march=armv8.2-a)
 #   endif()
 # endif()
-
