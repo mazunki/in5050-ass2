@@ -335,6 +335,7 @@ void parse_sof0(struct c63_common *cm)
     cm->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
 
     c63_initialize_constant_values(cm);
+    precompute_dctlookup_values();
 
     cm->curframe = 0;
   }

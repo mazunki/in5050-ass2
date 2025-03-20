@@ -19,10 +19,10 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, int16_t *out_data, uint8_t *quantization);
 
+void precompute_dctlookup_values();
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus
 
 #endif
-
-
