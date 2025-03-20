@@ -54,12 +54,12 @@ pipeline() {
 	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${BUILD_DIR}/' '${RUNNER}:${BUILD_DIR}/'")
 	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${SRC_DIR}/' '${RUNNER}:${SRC_DIR}/'")
 	fi
-	
+
 	echo "[PIPELINE] running profiling on gpu machine..."
 	echo "[PIPELINE] wiping workdir..."
 	runner "rm -rf '${WORKDIR}'"
 	runner "mkdir -p '${WORKDIR}'"
-	
+
 
 	cmd_enc="${BUILD_DIR}/c63enc -h '${VID_HEIGHT}' -w '${VID_WIDTH}' ${VID_FLAGS} -o '${VID_OUTPUT_ENC}' '${VID_INPUT}'"
 	cmd_dec="${BUILD_DIR}/c63dec '${VID_OUTPUT_ENC}' '${VID_OUTPUT_DEC}'"
@@ -71,10 +71,11 @@ pipeline() {
 	# runner "cd '${WORKDIR}' && ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
 
 	echo "[PIPELINE] decoding..."
-	# runner "cd '${WORKDIR}' && nsys profile -o '${REPORT_FILE_DEC}' -- ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }
-	runner "cd '${WORKDIR}' && ${cmd_dec}" || { echo "runner decoder failed with errno $?"; exit 2; }
+	runner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_DEC}' ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }
+	# runner "cd '${WORKDIR}' && ${cmd_dec}" || { echo "runner decoder failed with errno $?"; exit 2; }
 
 	echo "[PIPELINE] fetching profiling report..."
+  (set -x; rm -r ../workdir)
 	(set -x; rsync -av --progress "$RUNNER:$WORKDIR/" "../workdir/")
 }
 
