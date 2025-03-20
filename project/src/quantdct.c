@@ -15,7 +15,6 @@
 
 #define ISQRT2 0.70710678118654f
 
-
 static void dct_2d(const float *in, float *out) {
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
