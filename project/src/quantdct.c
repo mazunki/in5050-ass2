@@ -33,11 +33,11 @@ static void dct_2d(const float *in, float *out) {
         float32x4_t dct_x_vec2 = {dctlookup[4][u], dctlookup[5][u],
                                   dctlookup[6][u], dctlookup[7][u]};
 
-        float32x4_t mul_vec1 = vmulq_f32(in_vec1, dct_x_vec1);
-        float32x4_t mul_sum1 = vmulq_f32(mul_vec1, dct_y_vec);
+        float32x4_t mul_vec1 = vmulq_f32(dct_x_vec1, dct_y_vec);
+        float32x4_t mul_sum1 = vmulq_f32(in_vec1, mul_vec1);
 
-        float32x4_t mul_vec2 = vmulq_f32(in_vec2, dct_x_vec2);
-        float32x4_t mul_sum2 = vmulq_f32(mul_vec2, dct_y_vec);
+        float32x4_t mul_vec2 = vmulq_f32(dct_x_vec2, dct_y_vec);
+        float32x4_t mul_sum2 = vmulq_f32(in_vec2, mul_vec2);
 
         float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
 
@@ -62,11 +62,11 @@ static void idct_2d(const float *in, float *out) {
         float32x4_t in_vec1 = vld1q_f32(&in[y * MACROBLOCK_SIZE]);
         float32x4_t in_vec2 = vld1q_f32(&in[y * MACROBLOCK_SIZE + 4]);
 
-        float32x4_t mul_vec1 = vmulq_f32(in_vec1, *((float32x4_t *) dctlookup[u]));
-        float32x4_t mul_sum1 = vmulq_f32(mul_vec1, dct_y_vec);
+        float32x4_t mul_vec1 = vmulq_f32(*((float32x4_t *) dctlookup[u]), dct_y_vec);
+        float32x4_t mul_sum1 = vmulq_f32(in_vec1, mul_vec1);
 
-        float32x4_t mul_vec2 = vmulq_f32(in_vec2, *((float32x4_t *) &dctlookup[u][4]));
-        float32x4_t mul_sum2 = vmulq_f32(mul_vec2, dct_y_vec);
+        float32x4_t mul_vec2 = vmulq_f32(*((float32x4_t *) &dctlookup[u][4]), dct_y_vec);
+        float32x4_t mul_sum2 = vmulq_f32(in_vec2, mul_vec2);
 
         float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
         dct += vaddvq_f32(mul_sum);
