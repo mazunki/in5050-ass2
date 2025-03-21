@@ -40,38 +40,42 @@ void precompute_dctlookup_values() {
 }
 
 static void dct_2d(const float *in, float *out) {
-  for (int v = 0; v < MACROBLOCK_SIZE; v++) {
-    for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float32x4_t dct = { 0.0f, 0.0f, 0.0f, 0.0f };
+  memset(out, 0, MACROBLOCK_SIZE*MACROBLOCK_SIZE*sizeof(float));
 
-      for (int y = 0; y < MACROBLOCK_SIZE; y++) {
-        float32x4_t in_vec1 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE]);
-        float32x4_t in_vec2 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE + 4]);
+  for (int y = 0; y < MACROBLOCK_SIZE; y++) {
+    float32x4_t in_vec1 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE]);
+    float32x4_t in_vec2 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE + 4]);
+
+    for (int v = 0; v < MACROBLOCK_SIZE; v++) {
+      for (int u = 0; u < MACROBLOCK_SIZE; u++) {
+        float32x4_t dct = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         dct = vmlaq_f32(dct, in_vec1, precalcDct[y][u][v][0]);
         dct = vmlaq_f32(dct, in_vec2, precalcDct[y][u][v][1]);
-      }
 
-      out[v * MACROBLOCK_SIZE + u] = vaddvq_f32(dct);
+        out[v * MACROBLOCK_SIZE + u] += vaddvq_f32(dct);
+      }
     }
   }
 }
 
 
 static void idct_2d(const float *in, float *out) {
-  for (int v = 0; v < MACROBLOCK_SIZE; v++) {
-    for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float32x4_t dct = {0.0f, 0.0f, 0.0f, 0.0f };
+  memset(out, 0, MACROBLOCK_SIZE*MACROBLOCK_SIZE*sizeof(float));
 
-      for (int y = 0; y < MACROBLOCK_SIZE; y++) {
-        float32x4_t in_vec1 = vld1q_f32(&in[y * MACROBLOCK_SIZE]);
-        float32x4_t in_vec2 = vld1q_f32(&in[y * MACROBLOCK_SIZE + 4]);
+  for (int y = 0; y < MACROBLOCK_SIZE; y++) {
+    float32x4_t in_vec1 = vld1q_f32(&in[y * MACROBLOCK_SIZE]);
+    float32x4_t in_vec2 = vld1q_f32(&in[y * MACROBLOCK_SIZE + 4]);
+
+    for (int v = 0; v < MACROBLOCK_SIZE; v++) {
+      for (int u = 0; u < MACROBLOCK_SIZE; u++) {
+        float32x4_t dct = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         dct = vmlaq_f32(dct, in_vec1, precalcIdct[y][u][v][0]);
         dct = vmlaq_f32(dct, in_vec2, precalcIdct[y][u][v][1]);
-      }
 
-      out[v * MACROBLOCK_SIZE + u] = vaddvq_f32(dct);
+        out[v * MACROBLOCK_SIZE + u] += vaddvq_f32(dct);
+      }
     }
   }
 }
