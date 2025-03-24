@@ -47,7 +47,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 if(CMAKE_C_COMPILER_ID STREQUAL GNU)
   if(EXISTS "/etc/nv_tegra_release")
-    add_compile_options($<$<COMPILE_LANGUAGE:C>:-march=armv8.2-a+fp+fp16+simd>)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-march=armv8.2-a+fp+fp16+simd>)
   endif()
 else()
   message(FATAL "Not compiling with an gcc")
