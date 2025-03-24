@@ -13,6 +13,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
 void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, uint8_t *out_data, uint8_t *quantization);
 
@@ -24,5 +25,6 @@ void precompute_dctlookup_values();
 #ifdef __cplusplus
 }
 #endif // __cplusplus
+
 
 #endif
