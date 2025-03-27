@@ -33,6 +33,8 @@ void dequantize_idct_V(struct c63_common *cm) {
 }
 
 void dct_idct_Y(struct c63_common *cm) {
+  nvtxRangePush("Y");
+
   nvtxRangePush("dct");
   dct_quantize_Y(cm);
   nvtxRangePop(); // dct
@@ -40,9 +42,13 @@ void dct_idct_Y(struct c63_common *cm) {
   nvtxRangePush("idct");
   dequantize_idct_Y(cm);
   nvtxRangePop(); // idct
+
+  nvtxRangePop();
 }
 
 void dct_idct_U(struct c63_common *cm) {
+  nvtxRangePush("U");
+
   nvtxRangePush("dct");
   dct_quantize_U(cm);
   nvtxRangePop(); // dct
@@ -51,9 +57,12 @@ void dct_idct_U(struct c63_common *cm) {
   dequantize_idct_U(cm);
   nvtxRangePop(); // idct
 
+  nvtxRangePop();
 }
 
 void dct_idct_V(struct c63_common *cm) {
+  nvtxRangePush("V");
+
   nvtxRangePush("dct");
   dct_quantize_V(cm);
   nvtxRangePop(); // dct
@@ -61,8 +70,11 @@ void dct_idct_V(struct c63_common *cm) {
   nvtxRangePush("idct");
   dequantize_idct_V(cm);
   nvtxRangePop(); // idct
+
+  nvtxRangePop();
 }
 
+// pthread wrappers
 void *pthread_dct_idct_Y(void *ptr) {
   dct_idct_Y((struct c63_common *) ptr);
 

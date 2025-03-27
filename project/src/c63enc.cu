@@ -151,17 +151,9 @@ static void c63_encode_image(struct c63_common *cm)
     */
   nvtxRangePush("quantize+dequantize");
 
-  nvtxRangePush("Y");
   dct_idct_Y(cm);
-  nvtxRangePop(); // Y
-
-  nvtxRangePush("U");
   dct_idct_U(cm);
-  nvtxRangePop(); // U
-
-  nvtxRangePush("V");
   dct_idct_V(cm);
-  nvtxRangePop(); // V
 
   nvtxRangePop(); // quantize+dequantize
 
