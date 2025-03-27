@@ -211,8 +211,6 @@ __host__ void c63_motion_compensate(struct c63_common *cm)
 
   c63_pipeline *pipe = cm->pipe;
 
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_estimate_Y));
-
   c63_motion_compensate_kernel<<<grid_size_luma, block_size, 0, pipe->stream_compensate_Y>>>(pipe->d_mbs[Y_COMPONENT], pipe->d_predicted_Y, pipe->d_refframe_Y, Y_COMPONENT);
   CUDA_CHECK();
   CUDA_ASSERT(cudaEventRecord(pipe->event_compensate_Y, pipe->stream_compensate_Y));
