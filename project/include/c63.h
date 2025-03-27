@@ -143,7 +143,8 @@ struct c63_common
   struct c63_pipeline *pipe;
   yuv_t *frame_buffer[FRAMEBUFFER_SIZE];
   int fb_curr_index;
+
+  pthread_t pth_dct_idct[COLOR_COMPONENTS];
 };
 
 #endif  /* C63_C63_H_ */
-

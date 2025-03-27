@@ -3,6 +3,7 @@
 #include <getopt.h>
 #include <limits.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -151,9 +152,13 @@ static void c63_encode_image(struct c63_common *cm)
     */
   nvtxRangePush("quantize+dequantize");
 
-  dct_idct_Y(cm);
-  dct_idct_U(cm);
-  dct_idct_V(cm);
+  pthread_create(&cm->pth_dct_idct[Y_COMPONENT], NULL, pthread_dct_idct_Y, (void *) cm);
+  pthread_create(&cm->pth_dct_idct[U_COMPONENT], NULL, pthread_dct_idct_U, (void *) cm);
+  pthread_create(&cm->pth_dct_idct[V_COMPONENT], NULL, pthread_dct_idct_V, (void *) cm);
+
+  for (int i=0; i < COLOR_COMPONENTS; i++) {
+    pthread_join(cm->pth_dct_idct[i], NULL);
+  }
 
   nvtxRangePop(); // quantize+dequantize
 
