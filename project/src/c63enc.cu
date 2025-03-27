@@ -168,13 +168,6 @@ static void c63_encode_image(struct c63_common *cm)
 
   nvtxRangePop(); // quantize+dequantize
 
-  // we no longer need recons, ready it already
-  if (next_frame != NULL) {
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_recons_Y, pipe->h_recons->Y, cm->luma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_recons_U, pipe->h_recons->U, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_recons_V, pipe->h_recons->V, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-  }
-
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_Y));
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_U));
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_V));

@@ -1,6 +1,7 @@
 
 #include <nvToolsExt.h>
 #include "c63.h"
+#include "common.h"
 #include "quantdct.h"
 
 /** quantize (slow CPU-only function)
@@ -44,7 +45,11 @@ void dct_idct_Y(struct c63_common *cm) {
   dequantize_idct_Y(cm);
   nvtxRangePop(); // idct
 
-  nvtxRangePop();
+  nvtxRangePop(); // Y
+
+  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_Y, cm->pipe->h_recons->Y, cm->luma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
+  }
 }
 
 void dct_idct_U(struct c63_common *cm) {
@@ -58,7 +63,11 @@ void dct_idct_U(struct c63_common *cm) {
   dequantize_idct_U(cm);
   nvtxRangePop(); // idct
 
-  nvtxRangePop();
+  nvtxRangePop(); // U
+
+  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_U, cm->pipe->h_recons->U, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
+  }
 }
 
 void dct_idct_V(struct c63_common *cm) {
@@ -72,7 +81,11 @@ void dct_idct_V(struct c63_common *cm) {
   dequantize_idct_V(cm);
   nvtxRangePop(); // idct
 
-  nvtxRangePop();
+  nvtxRangePop(); // V
+
+  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
+    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_V, cm->pipe->h_recons->V, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
+  }
 }
 
 // pthread wrappers
