@@ -69,7 +69,7 @@ endif()
 include_directories(include)
 
 add_library(c63 STATIC
-            src/quantdct.c include/quantdct.h
+            src/quantdct.c src/quantdct.cu include/quantdct.h
             src/tables.cu include/tables.h
             src/io.cu include/io.h
             src/common.cu include/common.h

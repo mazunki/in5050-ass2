@@ -238,16 +238,6 @@ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
   }
 }
 
-void dequantize_idct_Y(struct c63_common *cm) {
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-}
-void dequantize_idct_U(struct c63_common *cm) {
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-}
-void dequantize_idct_V(struct c63_common *cm) {
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-}
-
 
 void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
                   uint32_t height, int16_t *out_data, uint8_t *quantization) {
@@ -257,14 +247,4 @@ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
     dct_quantize_row(in_data + y * width, prediction + y * width, width, height,
                      out_data + y * width, quantization);
   }
-}
-
-void dct_quantize_Y(struct c63_common *cm) {
-  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
-}
-void dct_quantize_U(struct c63_common *cm) {
-  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
-}
-void dct_quantize_V(struct c63_common *cm) {
-  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
 }

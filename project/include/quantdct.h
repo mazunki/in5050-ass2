@@ -30,6 +30,10 @@ void dct_quantize_Y(struct c63_common *cm);
 void dct_quantize_U(struct c63_common *cm);
 void dct_quantize_V(struct c63_common *cm);
 
+void dct_idct_Y(struct c63_common *cm);
+void dct_idct_U(struct c63_common *cm);
+void dct_idct_V(struct c63_common *cm);
+
 void precompute_dctlookup_values();
 
 #ifdef __cplusplus
