@@ -131,26 +131,6 @@ static void c63_encode_image(struct c63_common *cm)
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_U));
   CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_V));
 
-
-  /** quantize (slow CPU-only function)
-   *   @param[in]  orig
-   *   @param[in]  predicted
-   *   @param[out] residuals
-   */
-  nvtxRangePush("DCT & Quantization");
-  nvtxRangePush("dct Y");
-  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
-  nvtxRangePop(); // dct Y
-
-  nvtxRangePush("dct U");
-  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
-  nvtxRangePop(); // dct U
-
-  nvtxRangePush("dct V");
-  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
-  nvtxRangePop(); // dct V
-  nvtxRangePop(); // DCT & Quantization
-
   // we no longer need orig, ready it already
   yuv_t *next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
   if (next_frame != NULL) {
@@ -159,24 +139,42 @@ static void c63_encode_image(struct c63_common *cm)
     CUDA_ASSERT(cudaMemcpyAsync(pipe->d_orig_V, next_frame->V, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
   }
 
-  /** dequantize (slow CPU-only function)
-   *   @param[in]  residuals
+  /** quantize (slow CPU-only function)
+   *   @param[in]  orig
    *   @param[in]  predicted
-   *   @param[out] recons
+   *   @param[out] residuals
    */
-  nvtxRangePush("iDCT & Dequantization");
+   /** dequantize (slow CPU-only function)
+    *   @param[in]  residuals
+    *   @param[in]  predicted
+    *   @param[out] recons
+    */
+  nvtxRangePush("quantize+dequantize");
+  nvtxRangePush("dct Y");
+  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
+  nvtxRangePop(); // dct Y
+
   nvtxRangePush("idct Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
   nvtxRangePop(); // idct Y
+
+  nvtxRangePush("dct U");
+  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
+  nvtxRangePop(); // dct U
 
   nvtxRangePush("idct U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
   nvtxRangePop(); // idct U
 
+  nvtxRangePush("dct V");
+  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
+  nvtxRangePop(); // dct V
+
   nvtxRangePush("idct V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
   nvtxRangePop(); // idct V
-  nvtxRangePop(); // iDCT & Dequantization
+
+  nvtxRangePop(); // quantize+dequantize
 
   // we no longer need recons, ready it already
   if (next_frame != NULL) {
