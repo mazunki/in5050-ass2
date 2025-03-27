@@ -75,20 +75,24 @@ void dct_idct_V(struct c63_common *cm) {
 }
 
 // pthread wrappers
-void *pthread_dct_idct_Y(void *ptr) {
-  dct_idct_Y((struct c63_common *) ptr);
+void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
+  switch (component) {
+    case Y_COMPONENT: dct_idct_Y(cm); break;
+    case U_COMPONENT: dct_idct_U(cm); break;
+    case V_COMPONENT: dct_idct_V(cm); break;
+  }
 
   return NULL;
+}
+
+void *pthread_dct_idct_Y(void *ptr) {
+  return dct_idct_worker((struct c63_common *) ptr, Y_COMPONENT);
 }
 
 void *pthread_dct_idct_U(void *ptr) {
-  dct_idct_U((struct c63_common *) ptr);
-
-  return NULL;
+  return dct_idct_worker((struct c63_common *) ptr, U_COMPONENT);
 }
 
 void *pthread_dct_idct_V(void *ptr) {
-  dct_idct_V((struct c63_common *) ptr);
-
-  return NULL;
+  return dct_idct_worker((struct c63_common *) ptr, V_COMPONENT);
 }
