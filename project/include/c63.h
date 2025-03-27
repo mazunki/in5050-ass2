@@ -2,6 +2,7 @@
 #define C63_C63_H_
 
 #include <inttypes.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -145,6 +146,10 @@ struct c63_common
   int fb_curr_index;
 
   pthread_t pth_dct_idct[COLOR_COMPONENTS];
+  pthread_mutex_t pth_mutex_dct_idct;
+  pthread_cond_t pth_cond_dct_idct_ready, pth_cond_dct_idct_done;
+  int pth_pending_dct_idct[COLOR_COMPONENTS];
+  int pth_barrier_dct_idct;
 };
 
 #endif  /* C63_C63_H_ */

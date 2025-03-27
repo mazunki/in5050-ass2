@@ -152,13 +152,19 @@ static void c63_encode_image(struct c63_common *cm)
     */
   nvtxRangePush("quantize+dequantize");
 
-  pthread_create(&cm->pth_dct_idct[Y_COMPONENT], NULL, pthread_dct_idct_Y, (void *) cm);
-  pthread_create(&cm->pth_dct_idct[U_COMPONENT], NULL, pthread_dct_idct_U, (void *) cm);
-  pthread_create(&cm->pth_dct_idct[V_COMPONENT], NULL, pthread_dct_idct_V, (void *) cm);
 
-  for (int i=0; i < COLOR_COMPONENTS; i++) {
-    pthread_join(cm->pth_dct_idct[i], NULL);
+  pthread_mutex_lock(&cm->pth_mutex_dct_idct);
+  cm->pth_barrier_dct_idct = COLOR_COMPONENTS;
+  for (int i = 0; i < COLOR_COMPONENTS; ++i)
+    cm->pth_pending_dct_idct[i] = 1;
+  pthread_cond_broadcast(&cm->pth_cond_dct_idct_ready);
+  pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+
+  pthread_mutex_lock(&cm->pth_mutex_dct_idct);
+  while (cm->pth_barrier_dct_idct > 0) {
+    pthread_cond_wait(&cm->pth_cond_dct_idct_done, &cm->pth_mutex_dct_idct);
   }
+  pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
   nvtxRangePop(); // quantize+dequantize
 
@@ -242,6 +248,15 @@ struct c63_common* init_c63_enc(int width, int height)
 
   c63_initialize_constant_values(cm);
   precompute_dctlookup_values();
+
+  pthread_mutex_init(&cm->pth_mutex_dct_idct, NULL);
+  pthread_cond_init(&cm->pth_cond_dct_idct_ready, NULL);
+  pthread_cond_init(&cm->pth_cond_dct_idct_done, NULL);
+
+  cm->pth_barrier_dct_idct = 0;
+  pthread_create(&cm->pth_dct_idct[Y_COMPONENT], NULL, pthread_dct_idct_Y, (void *) cm);
+  pthread_create(&cm->pth_dct_idct[U_COMPONENT], NULL, pthread_dct_idct_U, (void *) cm);
+  pthread_create(&cm->pth_dct_idct[V_COMPONENT], NULL, pthread_dct_idct_V, (void *) cm);
 
   return cm;
 }

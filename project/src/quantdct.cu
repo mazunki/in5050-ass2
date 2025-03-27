@@ -1,5 +1,6 @@
 
 #include <nvToolsExt.h>
+#include "c63.h"
 #include "quantdct.h"
 
 /** quantize (slow CPU-only function)
@@ -76,14 +77,41 @@ void dct_idct_V(struct c63_common *cm) {
 
 // pthread wrappers
 void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
-  switch (component) {
-    case Y_COMPONENT: dct_idct_Y(cm); break;
-    case U_COMPONENT: dct_idct_U(cm); break;
-    case V_COMPONENT: dct_idct_V(cm); break;
-  }
+  yuv_t *next_frame;
+  do {
+    next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
+
+    pthread_mutex_lock(&cm->pth_mutex_dct_idct);
+    while (!cm->pth_pending_dct_idct[component] && next_frame != NULL) {
+      pthread_cond_wait(&cm->pth_cond_dct_idct_ready, &cm->pth_mutex_dct_idct);
+    }
+
+    if (next_frame == NULL) {
+      pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+      break;
+    }
+
+    cm->pth_pending_dct_idct[component] = 0;
+    pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+
+    switch (component) {
+      case Y_COMPONENT: dct_idct_Y(cm); break;
+      case U_COMPONENT: dct_idct_U(cm); break;
+      case V_COMPONENT: dct_idct_V(cm); break;
+    }
+
+    pthread_mutex_lock(&cm->pth_mutex_dct_idct);
+    cm->pth_barrier_dct_idct--;
+    if (cm->pth_barrier_dct_idct == 0) {
+      pthread_cond_signal(&cm->pth_cond_dct_idct_done);
+    }
+    pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+
+  } while (next_frame != NULL);
 
   return NULL;
 }
+
 
 void *pthread_dct_idct_Y(void *ptr) {
   return dct_idct_worker((struct c63_common *) ptr, Y_COMPONENT);
