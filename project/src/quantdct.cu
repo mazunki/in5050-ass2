@@ -113,7 +113,7 @@ void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
       break;
     }
 
-    cm->pth_pending_dct_idct[component] = 0;
+    cm->pth_pending_dct_idct[component] = false;
     pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
     switch (component) {

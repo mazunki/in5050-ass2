@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "c63.h"
 #include "common.h"
 
 struct c63_pipeline* c63_pipeline_init(size_t frame_size, size_t chroma_size, size_t num_blocks_luma, size_t num_blocks_chroma)
@@ -57,6 +58,15 @@ struct c63_pipeline* c63_pipeline_init(size_t frame_size, size_t chroma_size, si
   CUDA_ASSERT(cudaHostAlloc(&pipe->h_mbs[Y_COMPONENT], num_blocks_luma * sizeof(macroblock), cudaHostAllocDefault));
   CUDA_ASSERT(cudaHostAlloc(&pipe->h_mbs[U_COMPONENT], num_blocks_chroma * sizeof(macroblock), cudaHostAllocDefault));
   CUDA_ASSERT(cudaHostAlloc(&pipe->h_mbs[V_COMPONENT], num_blocks_chroma * sizeof(macroblock), cudaHostAllocDefault));
+
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_mbs[Y_COMPONENT], num_blocks_luma * sizeof(macroblock), cudaHostAllocDefault));
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_mbs[U_COMPONENT], num_blocks_chroma * sizeof(macroblock), cudaHostAllocDefault));
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_mbs[V_COMPONENT], num_blocks_chroma * sizeof(macroblock), cudaHostAllocDefault));
+
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_residuals, sizeof(dct_t), cudaHostAllocDefault));
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_residuals->Ydct, frame_size * sizeof(int16_t), cudaHostAllocDefault));
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_residuals->Udct, chroma_size * sizeof(int16_t), cudaHostAllocDefault));
+  CUDA_ASSERT(cudaHostAlloc(&pipe->unwritten_residuals->Vdct, chroma_size * sizeof(int16_t), cudaHostAllocDefault));
 
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_estimate_Y));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_estimate_U));
@@ -129,6 +139,14 @@ void c63_pipeline_free(struct c63_pipeline *pipe)
   CUDA_ASSERT(cudaFreeHost(pipe->h_mbs[Y_COMPONENT]));
   CUDA_ASSERT(cudaFreeHost(pipe->h_mbs[U_COMPONENT]));
   CUDA_ASSERT(cudaFreeHost(pipe->h_mbs[V_COMPONENT]));
+
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_mbs[Y_COMPONENT]));
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_mbs[U_COMPONENT]));
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_mbs[V_COMPONENT]));
+
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_residuals->Ydct));
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_residuals->Udct));
+  CUDA_ASSERT(cudaFreeHost(pipe->unwritten_residuals->Vdct));
 
   CUDA_ASSERT(cudaStreamDestroy(pipe->stream_estimate_Y));
   CUDA_ASSERT(cudaStreamDestroy(pipe->stream_estimate_U));
@@ -203,6 +221,11 @@ struct frame* prepare_next_frame(struct c63_common *cm)
     SWAP_POINTERS(cm->pipe->d_refframe_Y, cm->pipe->d_recons_Y, uint8_t *);
     SWAP_POINTERS(cm->pipe->d_refframe_U, cm->pipe->d_recons_U, uint8_t *);
     SWAP_POINTERS(cm->pipe->d_refframe_V, cm->pipe->d_recons_V, uint8_t *);
+
+    SWAP_POINTERS(cm->pipe->unwritten_residuals, cm->pipe->h_residuals, dct_t *);
+    SWAP_POINTERS(cm->pipe->unwritten_mbs[Y_COMPONENT], cm->pipe->h_mbs[Y_COMPONENT], struct macroblock *);
+    SWAP_POINTERS(cm->pipe->unwritten_mbs[U_COMPONENT], cm->pipe->h_mbs[U_COMPONENT], struct macroblock *);
+    SWAP_POINTERS(cm->pipe->unwritten_mbs[V_COMPONENT], cm->pipe->h_mbs[V_COMPONENT], struct macroblock *);
   }
 
   f->recons = cm->pipe->h_recons;
@@ -230,4 +253,3 @@ int fpeek(FILE *stream)
   ungetc(c, stream);
   return c;
 }
-

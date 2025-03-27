@@ -48,7 +48,7 @@ static void write_DQT(struct c63_common *cm)
 }
 
 /* Start of Frame (SOF) marker with baseline DCT (aka SOF0). */
-static void write_SOF0(struct c63_common *cm)
+static void write_SOF0(struct c63_common *cm, int is_keyframe)
 {
   int16_t size = 8 + 3 * COLOR_COMPONENTS + 1;
 
@@ -83,7 +83,7 @@ static void write_SOF0(struct c63_common *cm)
   put_byte(cm->e_ctx.fp, 2); /* Quant. tbl. id */
 
   /* Is this a keyframe or not? */
-  put_byte(cm->e_ctx.fp, cm->curframe->keyframe);
+  put_byte(cm->e_ctx.fp, is_keyframe);
 }
 
 static void write_DHT_HTS(struct c63_common *cm, uint8_t id, uint8_t *numlength,
@@ -171,14 +171,9 @@ static inline uint8_t bit_width(int16_t i)
 
 
 static void write_block(struct c63_common *cm, int16_t *in_data, uint32_t width,
-    uint32_t height, uint32_t uoffset, uint32_t voffset, int16_t *prev_DC,
-    int32_t cc, int channel)
+    uint32_t uoffset, uint32_t voffset, int16_t *prev_DC, int32_t cc, struct macroblock *mb)
 {
   uint32_t i, j;
-
-  /* Write motion vector */
-  struct macroblock *mb =
-    &cm->curframe->mbs[channel][voffset/8 * cm->padw[channel]/8 + uoffset/8];
 
   /* Use inter pred? */
   put_bits(&cm->e_ctx, mb->use_mv, 1);
@@ -293,26 +288,27 @@ static void write_block(struct c63_common *cm, int16_t *in_data, uint32_t width,
 
 static void write_interleaved_data_MCU(struct c63_common *cm, int16_t *dct,
     uint32_t wi, uint32_t he, uint32_t h, uint32_t v, uint32_t x, uint32_t y,
-    int16_t *prev_DC, int32_t cc, int channel)
+    int16_t *prev_DC, int32_t cc, int channel, frame *f)
 {
-  uint32_t i, j, ii, jj;
+  uint32_t i, j, uoffset, voffset;
 
   for(j = y*v*8; j < (y+1)*v*8; j += 8)
   {
-    jj = he-8;
-    jj = MIN(j, jj);
+    voffset = he-8;
+    voffset = MIN(j, voffset);
 
     for(i = x*h*8; i < (x+1)*h*8; i += 8)
     {
-      ii = wi-8;
-      ii = MIN(i, ii);
+      uoffset = wi-8;
+      uoffset = MIN(i, uoffset);
 
-      write_block(cm, dct, wi, he, ii, jj, prev_DC, cc, channel);
+      struct macroblock *mb = &f->mbs[channel][voffset/8 * cm->padw[channel]/8 + uoffset/8];
+      write_block(cm, dct, wi, uoffset, voffset, prev_DC, cc, mb);
     }
   }
 }
 
-static void write_interleaved_data(struct c63_common *cm)
+static void write_interleaved_data(struct c63_common *cm, frame *f)
 {
   int16_t prev_DC[3] = {0, 0, 0};
   uint32_t u, v;
@@ -335,19 +331,16 @@ static void write_interleaved_data(struct c63_common *cm)
   {
     for(u = 0; u < ublocks; ++u)
     {
-      write_interleaved_data_MCU(cm, cm->curframe->residuals->Ydct, cm->ypw,
-          cm->yph, YX, YY, u, v, &prev_DC[0], yhtbl, 0);
-      write_interleaved_data_MCU(cm, cm->curframe->residuals->Udct, cm->upw,
-          cm->uph, UX, UY, u, v, &prev_DC[1], uhtbl, 1);
-      write_interleaved_data_MCU(cm, cm->curframe->residuals->Vdct, cm->vpw,
-          cm->vph, VX, VY, u, v, &prev_DC[2], vhtbl, 2);
+      write_interleaved_data_MCU(cm, f->residuals->Ydct, cm->ypw, cm->yph, YX, YY, u, v, &prev_DC[0], yhtbl, 0, f);
+      write_interleaved_data_MCU(cm, f->residuals->Udct, cm->upw, cm->uph, UX, UY, u, v, &prev_DC[1], uhtbl, 1, f);
+      write_interleaved_data_MCU(cm, f->residuals->Vdct, cm->vpw, cm->vph, VX, VY, u, v, &prev_DC[2], vhtbl, 2, f);
     }
   }
 
   flush_bits(&cm->e_ctx);
 }
 
-void write_frame(struct c63_common *cm)
+void write_frame(struct c63_common *cm, frame *f)
 {
   /* Write headers */
 
@@ -356,14 +349,37 @@ void write_frame(struct c63_common *cm)
   /* Define Quantization Table(s) */
   write_DQT(cm);
   /* Start Of Frame 0(Baseline DCT) */
-  write_SOF0(cm);
+  write_SOF0(cm, f->keyframe);
   /* Define Huffman Tables(s) */
   write_DHT(cm);
   /* Start of Scan */
   write_SOS(cm);
 
-  write_interleaved_data(cm);
+  write_interleaved_data(cm, f);
 
   /* End Of Image */
   write_EOI(cm);
+}
+
+void *pthread_write_frame(void *ptr) {
+  struct c63_common *cm = (struct c63_common *) ptr;
+
+  yuv_t *next_frame;
+  do {
+    next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
+
+    pthread_mutex_lock(&cm->pth_mutex_write_frame);
+    pthread_cond_wait(&cm->pth_cond_write_frame, &cm->pth_mutex_write_frame);
+
+    if (cm->curframe == NULL) {
+      pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+      break;
+    }
+
+    write_frame(cm, cm->curframe);
+
+    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+  } while (next_frame != NULL);
+
+  return NULL;
 }

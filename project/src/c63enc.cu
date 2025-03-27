@@ -173,7 +173,11 @@ static void c63_encode_image(struct c63_common *cm)
    *   @param[out] cm->e_ctx.fp (write to disk)
    */
    nvtxRangePush("Writing to Disk");
-   write_frame(cm);
+
+   pthread_mutex_lock(&cm->pth_mutex_write_frame);
+   pthread_cond_signal(&cm->pth_cond_write_frame);
+   pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+
    nvtxRangePop(); // Writing to Disk
 
   ++cm->framenum;
@@ -245,6 +249,10 @@ struct c63_common* init_c63_enc(int width, int height)
   pthread_create(&cm->pth_dct_idct[Y_COMPONENT], NULL, pthread_dct_idct_Y, (void *) cm);
   pthread_create(&cm->pth_dct_idct[U_COMPONENT], NULL, pthread_dct_idct_U, (void *) cm);
   pthread_create(&cm->pth_dct_idct[V_COMPONENT], NULL, pthread_dct_idct_V, (void *) cm);
+
+  pthread_mutex_init(&cm->pth_mutex_write_frame, NULL);
+  pthread_cond_init(&cm->pth_cond_write_frame, NULL);
+  pthread_create(&cm->pth_write_frame, NULL, pthread_write_frame, (void *) cm);
 
   return cm;
 }
@@ -358,6 +366,7 @@ int main(int argc, char **argv)
     if (limit_numframes && numframes >= limit_numframes) { break; }
   } while (cm->frame_buffer[cm->fb_curr_index] != NULL);
 
+  pthread_join(cm->pth_write_frame, NULL);
 
   printf("Completed encoding! Encoded %d frames\n", numframes);
 

@@ -98,8 +98,8 @@ struct c63_pipeline {
 
   yuv_t *h_refframe, *h_recons;  // note that these pointers are swapped each frame
   yuv_t *h_predicted;
-  dct_t *h_residuals;
-  struct macroblock *h_mbs[COLOR_COMPONENTS];
+  dct_t *h_residuals, *unwritten_residuals;
+  struct macroblock *h_mbs[COLOR_COMPONENTS], *unwritten_mbs[COLOR_COMPONENTS];
 
 #ifdef __CUDACC__ // CUDA contexts
   cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
@@ -150,6 +150,14 @@ struct c63_common
   pthread_cond_t pth_cond_dct_idct_ready, pth_cond_dct_idct_done;
   int pth_pending_dct_idct[COLOR_COMPONENTS];
   int pth_barrier_dct_idct;
+
+  pthread_t pth_write_frame;
+  pthread_mutex_t pth_mutex_write_frame;
+  pthread_cond_t pth_cond_write_frame;
+  int pth_pending_write_frame;
+  int pth_done_write_frame;
+
+  struct frame *unwritten_frame;
 };
 
 #endif  /* C63_C63_H_ */
