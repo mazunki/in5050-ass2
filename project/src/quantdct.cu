@@ -10,12 +10,21 @@
  *   @param[out] residuals
  */
 void dct_quantize_Y(struct c63_common *cm) {
+  nvtxRangePush("stream pred Y");
+  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_Y));
+  nvtxRangePop(); // stream pred Y
   dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
 }
 void dct_quantize_U(struct c63_common *cm) {
+  nvtxRangePush("stream pred U");
+  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_U));
+  nvtxRangePop(); // stream pred U
   dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
 }
 void dct_quantize_V(struct c63_common *cm) {
+  nvtxRangePush("stream pred V");
+  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_V));
+  nvtxRangePop(); // stream pred V
   dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
 }
 

@@ -15,6 +15,8 @@
 #include "me.h"
 #include "tables.h"
 
+#include <nvToolsExt.h>
+
 
 // estimation
 __global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons, macroblock *d_mbs, int comp);
@@ -190,7 +192,7 @@ __global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons, m
 
 /**
  * @brief Motion Compensation
- * 
+ *
  * Motion compensation predicts what a frame would look like
  * using the datablocks provided to it, and the previous
  * frame's reconstructed frame.
@@ -242,4 +244,3 @@ __global__ void c63_motion_compensate_kernel(struct macroblock *d_mbs, uint8_t *
 
     d_predicted[(top + ty) * c_padw[comp] + (left + tx)] = d_ref[(top + ty + mb->mv_y) * c_padw[comp] + (left + tx + mb->mv_x)];
 }
-

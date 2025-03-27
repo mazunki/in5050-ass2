@@ -99,7 +99,9 @@ static void c63_encode_image(struct c63_common *cm)
      *   @param[in]  d_ref
      *   @param[out] d_mbs
      */
+    nvtxRangePush("stream image");
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
+    nvtxRangePop(); // stream image
     c63_motion_estimate(cm);
 
     CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_macroblocks_Y, pipe->event_estimate_Y));
@@ -128,10 +130,6 @@ static void c63_encode_image(struct c63_common *cm)
     CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->V, pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_V));
   }
 
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_Y));
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_U));
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_predictions_V));
-
   // we no longer need orig, ready it already
   yuv_t *next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
   if (next_frame != NULL) {
@@ -155,8 +153,9 @@ static void c63_encode_image(struct c63_common *cm)
 
   pthread_mutex_lock(&cm->pth_mutex_dct_idct);
   cm->pth_barrier_dct_idct = COLOR_COMPONENTS;
-  for (int i = 0; i < COLOR_COMPONENTS; ++i)
+  for (int i = 0; i < COLOR_COMPONENTS; ++i) {
     cm->pth_pending_dct_idct[i] = 1;
+  }
   pthread_cond_broadcast(&cm->pth_cond_dct_idct_ready);
   pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
@@ -167,10 +166,6 @@ static void c63_encode_image(struct c63_common *cm)
   pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
   nvtxRangePop(); // quantize+dequantize
-
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_Y));
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_U));
-  CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_macroblocks_V));
 
   /** save buffer (slow write-to-disk function)
    *   @param[in]  cm->curframe->residuals->{Y,U,V}dct
