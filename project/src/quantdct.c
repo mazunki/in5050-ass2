@@ -12,6 +12,7 @@
 #include "tables.h"
 
 #include <arm_neon.h>
+#include <nvToolsExt.h>
 
 #define ISQRT2 0.70710678118654f
 
@@ -30,7 +31,9 @@ void precompute_dctlookup_values() {
   }
 }
 
-static void dct_2d(const float *in, float *out) {
+static void dct_2d(const float *in, float *out)
+{
+  nvtxRangePush("dct 2d");
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
       float dct = 0.0f;
@@ -64,10 +67,13 @@ static void dct_2d(const float *in, float *out) {
       out[v * MACROBLOCK_SIZE + u] = dct;
     }
   }
+  nvtxRangePop();
 }
 
 
-static void idct_2d(const float *in, float *out) {
+static void idct_2d(const float *in, float *out)
+{
+  nvtxRangePush("idct 2d");
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
       float dct = 0.0f;
@@ -87,9 +93,12 @@ static void idct_2d(const float *in, float *out) {
       out[v * MACROBLOCK_SIZE + u] = dct;
     }
   }
+  nvtxRangePop();
 }
 
-static void scale_block(float *in_data, float *out_data) {
+static void scale_block(float *in_data, float *out_data)
+{
+  nvtxRangePush("scblk");
   int u, v;
 
   for (v = 0; v < MACROBLOCK_SIZE; ++v) {
@@ -102,10 +111,12 @@ static void scale_block(float *in_data, float *out_data) {
           in_data[v * MACROBLOCK_SIZE + u] * a1 * a2;
     }
   }
+  nvtxRangePop();
 }
 
-static void quantize_block(float *in_data, float *out_data,
-                           uint8_t *quant_tbl) {
+static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+{
+  nvtxRangePush("q blk");
   int zigzag;
 
   for (zigzag = 0; zigzag < 64; ++zigzag) {
@@ -117,10 +128,12 @@ static void quantize_block(float *in_data, float *out_data,
     /* Zig-zag and quantize */
     out_data[zigzag] = (float)round((dct / 4.0) / quant_tbl[zigzag]);
   }
+  nvtxRangePop();
 }
 
-static void dequantize_block(float *in_data, float *out_data,
-                             uint8_t *quant_tbl) {
+static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+{
+  nvtxRangePush("dq blk");
   int zigzag;
 
   for (zigzag = 0; zigzag < 64; ++zigzag) {
@@ -132,10 +145,11 @@ static void dequantize_block(float *in_data, float *out_data,
     /* Zig-zag and de-quantize */
     out_data[v * 8 + u] = (float)round((dct * quant_tbl[zigzag]) / 4.0);
   }
+  nvtxRangePop();
 }
 
-static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
-                                uint8_t *quant_tbl) {
+static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+{
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
 
@@ -152,8 +166,10 @@ static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
   }
 }
 
-static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
-                                   uint8_t *quant_tbl) {
+static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+{
+  nvtxRangePush("dq 8x8");
+
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
 
@@ -168,11 +184,13 @@ static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
     out_data[i] = mb2[i];
   }
+
+  nvtxRangePop();
 }
 
-static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w,
-                                int h, int y, uint8_t *out_data,
-                                uint8_t *quantization) {
+static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y, uint8_t *out_data, uint8_t *quantization)
+{
+  nvtxRangePush("dq row");
   int x;
 
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
@@ -181,15 +199,13 @@ static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w,
   for (x = 0; x < w; x += MACROBLOCK_SIZE) {
     int i, j;
 
-    dequant_idct_block_8x8(in_data + (x * MACROBLOCK_SIZE), block,
-                           quantization);
+    dequant_idct_block_8x8(in_data + (x * MACROBLOCK_SIZE), block, quantization);
 
     for (i = 0; i < MACROBLOCK_SIZE; ++i) {
       for (j = 0; j < MACROBLOCK_SIZE; ++j) {
         /* Add prediction block. Note: DCT is not precise -
            Clamp to legal values */
-        int16_t tmp =
-            block[i * MACROBLOCK_SIZE + j] + (int16_t)prediction[i * w + j + x];
+        int16_t tmp = block[i * MACROBLOCK_SIZE + j] + (int16_t)prediction[i * w + j + x];
 
         if (tmp < 0) {
           tmp = 0;
@@ -201,10 +217,12 @@ static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w,
       }
     }
   }
+  nvtxRangePop();
 }
 
-static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
-                             int h, int16_t *out_data, uint8_t *quantization) {
+static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data, uint8_t *quantization)
+{
+  nvtxRangePush("q row");
   int x;
 
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
@@ -225,11 +243,11 @@ static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w,
        functions. */
     dct_quant_block_8x8(block, out_data + (x * MACROBLOCK_SIZE), quantization);
   }
+  nvtxRangePop();
 }
 
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-                     uint32_t height, uint8_t *out_data,
-                     uint8_t *quantization) {
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height, uint8_t *out_data, uint8_t *quantization)
+{
   int y;
 
   for (y = 0; y < height; y += MACROBLOCK_SIZE) {

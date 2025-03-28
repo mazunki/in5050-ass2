@@ -27,5 +27,6 @@ set(ENV{CUDA_HOME} "/usr/local/cuda")
 set(ENV{PATH} "$ENV{CUDA_HOME}/bin:$ENV{PATH}")
 set(ENV{LD_LIBRARY_PATH} "$ENV{CUDA_HOME}/lib64:$ENV{LD_LIBRARY_PATH}")
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include_directories("/opt/nvidia/hpc_sdk/Linux_x86_64/25.1/compilers/include-stdpar/nvtx3")
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

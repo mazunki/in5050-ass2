@@ -18,3 +18,4 @@ set(ENV{CUDA_HOME} "/usr/local/cuda-11.4")
 set(ENV{PATH} "$ENV{CUDA_HOME}/bin:$ENV{PATH}")
 set(ENV{LD_LIBRARY_PATH} "$ENV{CUDA_HOME}/lib64:$ENV{LD_LIBRARY_PATH}")
 
+include_directories(/opt/nvidia/nsight-systems/2023.2.4/target-linux-tegra-armv8/nvtx/include/nvtx3)
