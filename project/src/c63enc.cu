@@ -175,6 +175,7 @@ static void c63_encode_image(struct c63_common *cm)
    nvtxRangePush("Writing to Disk");
 
    pthread_mutex_lock(&cm->pth_mutex_write_frame);
+   cm->unwritten_frame = cm->curframe;
    pthread_cond_signal(&cm->pth_cond_write_frame);
    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
 

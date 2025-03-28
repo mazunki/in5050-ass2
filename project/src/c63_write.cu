@@ -379,7 +379,7 @@ void *pthread_write_frame(void *ptr) {
     }
 
     nvtxRangePush("write");
-    write_frame(cm, cm->curframe);
+    write_frame(cm, cm->unwritten_frame);
     nvtxRangePop();
 
     pthread_mutex_unlock(&cm->pth_mutex_write_frame);
