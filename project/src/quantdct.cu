@@ -1,8 +1,8 @@
 
-#include <nvToolsExt.h>
 #include "c63.h"
 #include "common.h"
 #include "quantdct.h"
+#include "profiling.h"
 
 /** quantize (slow CPU-only function)
  *   @param[in]  orig
@@ -10,31 +10,31 @@
  *   @param[out] residuals
  */
 void dct_quantize_Y(struct c63_common *cm) {
-  nvtxRangePush("stream pred");
+  startTrace5("stream pred");
   CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_Y));
-  nvtxRangePop();
+  endTrace();
 
-  nvtxRangePush("dct");
+  startTrace5("dct");
   dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 void dct_quantize_U(struct c63_common *cm) {
-  nvtxRangePush("stream pred");
+  startTrace5("stream pred");
   CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_U));
-  nvtxRangePop();
+  endTrace();
 
-  nvtxRangePush("dct");
+  startTrace5("dct");
   dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 void dct_quantize_V(struct c63_common *cm) {
-  nvtxRangePush("stream pred");
+  startTrace5("stream pred");
   CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_V));
-  nvtxRangePop();
+  endTrace();
 
-  nvtxRangePush("dct");
+  startTrace5("dct");
   dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 
 /** dequantize (slow CPU-only function)
@@ -43,23 +43,23 @@ void dct_quantize_V(struct c63_common *cm) {
  *   @param[out] recons
  */
 void dequantize_idct_Y(struct c63_common *cm) {
-  nvtxRangePush("idct");
+  startTrace5("idct");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 void dequantize_idct_U(struct c63_common *cm) {
-  nvtxRangePush("idct");
+  startTrace5("idct");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 void dequantize_idct_V(struct c63_common *cm) {
-  nvtxRangePush("idct");
+  startTrace5("idct");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-  nvtxRangePop();
+  endTrace();
 }
 
 void dct_idct_Y(struct c63_common *cm) {
-  nvtxRangePush("dct_idct_Y");
+  startTrace4("dct_idct_Y");
 
   dct_quantize_Y(cm);
   dequantize_idct_Y(cm);
@@ -68,11 +68,11 @@ void dct_idct_Y(struct c63_common *cm) {
     CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_Y, cm->pipe->h_recons->Y, cm->luma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
   }
 
-  nvtxRangePop();
+  endTrace();
 }
 
 void dct_idct_U(struct c63_common *cm) {
-  nvtxRangePush("dct_idct_U");
+  startTrace4("dct_idct_U");
 
   dct_quantize_U(cm);
   dequantize_idct_U(cm);
@@ -81,11 +81,11 @@ void dct_idct_U(struct c63_common *cm) {
     CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_U, cm->pipe->h_recons->U, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
   }
 
-  nvtxRangePop();
+  endTrace();
 }
 
 void dct_idct_V(struct c63_common *cm) {
-  nvtxRangePush("dct_idct_V");
+  startTrace4("dct_idct_V");
 
   dct_quantize_V(cm);
   dequantize_idct_V(cm);
@@ -94,7 +94,7 @@ void dct_idct_V(struct c63_common *cm) {
     CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_V, cm->pipe->h_recons->V, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
   }
 
-  nvtxRangePop();
+  endTrace();
 }
 
 // pthread wrappers

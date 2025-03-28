@@ -16,7 +16,7 @@
 #include "me.h"
 #include "tables.h"
 
-#include <nvToolsExt.h>
+#include "profiling.h"
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -76,7 +76,7 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm, int fb_index)
 
 static void c63_encode_image(struct c63_common *cm)
 {
-  nvtxRangePush("Encode image");
+  startTrace1("Encode image");
 
   c63_pipeline *pipe = cm->pipe;
 
@@ -99,9 +99,9 @@ static void c63_encode_image(struct c63_common *cm)
      *   @param[in]  d_ref
      *   @param[out] d_mbs
      */
-    nvtxRangePush("stream image");
+    startTrace2("stream image");
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
-    nvtxRangePop(); // stream image
+    endTrace();
     c63_motion_estimate(cm);
 
     CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_macroblocks_Y, pipe->event_estimate_Y));
@@ -148,8 +148,7 @@ static void c63_encode_image(struct c63_common *cm)
     *   @param[in]  predicted
     *   @param[out] recons
     */
-  nvtxRangePush("quantize+dequantize");
-
+  startTrace2("quantize+dequantize");
 
   pthread_mutex_lock(&cm->pth_mutex_dct_idct);
   cm->pth_barrier_dct_idct = COLOR_COMPONENTS;
@@ -165,26 +164,26 @@ static void c63_encode_image(struct c63_common *cm)
   }
   pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
-  nvtxRangePop(); // quantize+dequantize
+  endTrace();
 
   /** save buffer (slow write-to-disk function)
    *   @param[in]  cm->curframe->residuals->{Y,U,V}dct
    *   @param[in]  mb->curframe->mbs
    *   @param[out] cm->e_ctx.fp (write to disk)
    */
-   nvtxRangePush("Writing to Disk");
+  startTrace2("Writing to Disk");
 
-   pthread_mutex_lock(&cm->pth_mutex_write_frame);
-   cm->unwritten_frame = cm->curframe;
-   pthread_cond_signal(&cm->pth_cond_write_frame);
-   pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+  pthread_mutex_lock(&cm->pth_mutex_write_frame);
+  cm->unwritten_frame = cm->curframe;
+  pthread_cond_signal(&cm->pth_cond_write_frame);
+  pthread_mutex_unlock(&cm->pth_mutex_write_frame);
 
-   nvtxRangePop(); // Writing to Disk
+  endTrace();
 
   ++cm->framenum;
   ++cm->frames_since_keyframe;
 
-  nvtxRangePop(); // encode image
+  endTrace();
 }
 
 struct c63_common* init_c63_enc(int width, int height)

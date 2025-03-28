@@ -13,7 +13,7 @@
 #include "io.h"
 #include "tables.h"
 
-#include <nvToolsExt.h>
+#include "profiling.h"
 
 int frequencies[2][12];
 
@@ -378,9 +378,9 @@ void *pthread_write_frame(void *ptr) {
       break;
     }
 
-    nvtxRangePush("write");
+    startTrace4("write");
     write_frame(cm, cm->unwritten_frame);
-    nvtxRangePop();
+    endTrace();
 
     pthread_mutex_unlock(&cm->pth_mutex_write_frame);
   } while (next_frame != NULL);

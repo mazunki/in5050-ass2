@@ -15,7 +15,7 @@
 #include "me.h"
 #include "tables.h"
 
-#include <nvToolsExt.h>
+#include "profiling.h"
 
 /* Decode VLC token */
 static uint8_t get_vlc_token(struct entropy_ctx *c, uint16_t *table,
@@ -420,7 +420,7 @@ int parse_c63_frame(struct c63_common *cm)
 
 void decode_c63_frame(struct c63_common *cm, FILE *fout)
 {
-  nvtxRangePush("Decode image");
+  startTrace2("Decode image");
 
   if (!cm->curframe->keyframe) {
 
@@ -439,9 +439,9 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
      *   @param[in] d_ref
      */
 
-    nvtxRangePush("Motion compensation");
+    startTrace3("Motion compensation");
     c63_motion_compensate(cm);
-    nvtxRangePop(); // Motion compensation
+    endTrace();
     CUDA_ASSERT(cudaDeviceSynchronize());
 
     CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->Y, cm->pipe->d_predicted_Y, cm->luma_size, cudaMemcpyDeviceToHost));
@@ -456,21 +456,21 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
     *   @param[in]  predicted
     *   @param[out] recons
     */
-  nvtxRangePush("Dequantization");
-  nvtxRangePush("idct Y");
+  startTrace3("Dequantization");
+  startTrace4("idct Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-  nvtxRangePop(); // idct Y
+  endTrace();
 
-  nvtxRangePush("idct U");
+  startTrace4("idct U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-  nvtxRangePop(); // idct U
+  endTrace();
 
-  nvtxRangePush("idct V");
+  startTrace4("idct V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-  nvtxRangePop(); // idct V
-  nvtxRangePop(); // Dequantization
+  endTrace();
+  endTrace();
 
-  nvtxRangePush("Dump image");
+  startTrace3("Dump image");
 #ifndef C63_PRED
   /* Write result */
   dump_image(cm->curframe->recons, cm->width, cm->height, fout);
@@ -478,10 +478,10 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
   /* To dump the predicted frames, use this instead */
   dump_image(cm->curframe->predicted, cm->width, cm->height, fout);
 #endif
-  nvtxRangePop(); // Dump image
+  endTrace();
 
   ++cm->framenum;
-  nvtxRangePop(); // Encode image
+  endTrace(); // Encode image
 }
 
 static void print_help(int argc, char **argv)
@@ -514,7 +514,7 @@ int main(int argc, char **argv)
   int framenum = 0;
   while(fpeek(fin) != EOF)
   {
-    nvtxRangePush("Decode frame");
+    startTrace1("Decode frame");
     DEBUG("Decoding frame %d", framenum);
     cm->curframe = prepare_next_frame(cm);
 
@@ -523,26 +523,24 @@ int main(int argc, char **argv)
      * @param[out] curframe->mbs
      * @param[out] curframe->height, width, num_blocks_luma, num_blocks_chroma
      */
-    nvtxRangePush("Parse frame");
+    startTrace2("Parse frame");
     parse_c63_frame(cm);
-    nvtxRangePop();
+    endTrace();
 
-    nvtxRangePush("Copy frame");
+    startTrace2("Copy frame");
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[Y_COMPONENT], cm->curframe->mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[U_COMPONENT], cm->curframe->mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
     CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[V_COMPONENT], cm->curframe->mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
-    nvtxRangePop();
+    endTrace();
 
      /**
      * @param[in]  fin
      * @param[out] curframe->mbs
      */
-    nvtxRangePush("Decode frame");
     decode_c63_frame(cm, fout);
-    nvtxRangePop();
 
     framenum++;
-    nvtxRangePop();
+    endTrace();
   }
   c63_pipeline_free(cm->pipe);
   free(cm);
