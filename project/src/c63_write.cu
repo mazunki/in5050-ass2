@@ -13,6 +13,8 @@
 #include "io.h"
 #include "tables.h"
 
+#include <nvToolsExt.h>
+
 int frequencies[2][12];
 
 /* Start of Image (SOI) marker, contains no payload. */
@@ -376,7 +378,9 @@ void *pthread_write_frame(void *ptr) {
       break;
     }
 
+    nvtxRangePush("write");
     write_frame(cm, cm->curframe);
+    nvtxRangePop();
 
     pthread_mutex_unlock(&cm->pth_mutex_write_frame);
   } while (next_frame != NULL);
