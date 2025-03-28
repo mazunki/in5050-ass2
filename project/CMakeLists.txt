@@ -19,8 +19,14 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 # Overwrite default -O3 flag for Release mode
 set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize")
 # Make sure Debug mode flags are similar to Release mode flags
-set(CMAKE_C_FLAGS_DEBUG "-ggdb3 -pg -O1 -fno-tree-vectorize -DNDEBUG")
-set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -DNDEBUG")
+
+set(TRACE_LEVEL $ENV{TRACE_LEVEL})
+if (NOT TRACE_LEVEL)
+  set(TRACE_LEVEL 4)
+endif()
+
+set(CMAKE_C_FLAGS_DEBUG "-ggdb3 -pg -O1 -fno-tree-vectorize -DNDEBUG -DTRACE_LEVEL=${TRACE_LEVEL}")
+set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -DNDEBUG -DTRACE_LEVEL=${TRACE_LEVEL}")
 
 set(CMAKE_CUDA_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/include)

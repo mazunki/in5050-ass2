@@ -16,6 +16,7 @@ REPORT_FILE="report.nsys-rep"
 BUILDER="${BUILDER:-${PROJECT_USER}@tegra-3}"
 RUNNER="${RUNNER:-${PROJECT_USER}@tegra-3}"
 BUILD_MODE="${BUILD_MODE:-Debug}"
+TRACE_LEVEL="${TRACE_LEVEL:-4}"
 
 VID_HEIGHT="288"
 VID_WIDTH="352"
@@ -44,7 +45,7 @@ pipeline() {
 	(set -x; rsync -av --progress . "${BUILDER}:${PROJECT_ROOT}/")
 
 	echo "[PIPELINE] updating cmake..."
-	builder "cd '${PROJECT_ROOT}' && rm -rf build && cmake -B build -DCMAKE_BUILD_TYPE='${BUILD_MODE}' -DCMAKE_TOOLCHAIN_FILE=in5050-toolchain.cmake"
+	builder "cd '${PROJECT_ROOT}' && rm -rf build && cmake -B build -DCMAKE_BUILD_TYPE='${BUILD_MODE}' -DCMAKE_TOOLCHAIN_FILE=in5050-toolchain.cmake -DTRACE_LEVEL='${TRACE_LEVEL}'"
 
 	echo "[PIPELINE] building project..."
 	builder "cd '${BUILD_DIR}' && make"
@@ -82,4 +83,3 @@ pipeline() {
 
 
 pipeline
-

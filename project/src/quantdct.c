@@ -101,7 +101,7 @@ static void idct_2d(const float *in, float *out)
 
 static void scale_block(float *in_data, float *out_data)
 {
-  startTrace8("scblk");
+  startTrace8("scaleblk");
   int u, v;
 
   for (v = 0; v < MACROBLOCK_SIZE; ++v) {
@@ -119,7 +119,7 @@ static void scale_block(float *in_data, float *out_data)
 
 static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
-  startTrace8("q blk");
+  startTrace8("quant blk");
   int zigzag;
 
   for (zigzag = 0; zigzag < 64; ++zigzag) {
@@ -136,7 +136,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 
 static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
-  startTrace8("dq blk");
+  startTrace8("deq blk");
   int zigzag;
 
   for (zigzag = 0; zigzag < 64; ++zigzag) {
@@ -153,6 +153,8 @@ static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl
 
 static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
+  startTrace7("quant 8x8");
+
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
 
@@ -167,11 +169,13 @@ static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *qu
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
     out_data[i] = mb2[i];
   }
+
+  endTrace();
 }
 
 static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
 {
-  startTrace7("dq 8x8");
+  startTrace7("deq 8x8");
 
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
@@ -193,7 +197,7 @@ static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t 
 
 static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y, uint8_t *out_data, uint8_t *quantization)
 {
-  startTrace6("dq row");
+  startTrace6("deq row");
   int x;
 
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
@@ -225,7 +229,7 @@ static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, in
 
 static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data, uint8_t *quantization)
 {
-  startTrace6("q row");
+  startTrace6("quant row");
   int x;
 
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
