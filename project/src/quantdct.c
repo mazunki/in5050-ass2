@@ -21,6 +21,7 @@ static float32x4_t precalcIdct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE
 static float32x4_t precalcDct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][2];
 
 void precompute_dctlookup_values() {
+  startTrace3("precompute dctlookup");
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
@@ -39,6 +40,7 @@ void precompute_dctlookup_values() {
       }
     }
   }
+  endTrace();
 }
 
 static void dct_2d(const float *in, float *out)
