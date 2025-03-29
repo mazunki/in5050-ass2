@@ -30,6 +30,15 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
+#define N_THREADS (COLOR_COMPONENTS + 1)
+static pthread_t threads[N_THREADS];
+void cleanup_cm(void) {
+  for (int i=0; i < N_THREADS; i++) {
+    pthread_cancel(threads[i]);
+  }
+}
+
+
 /* Read planar YUV frames with 4:2:0 chroma sub-sampling */
 static yuv_t* read_yuv(FILE *file, struct c63_common *cm, int fb_index)
 {
@@ -150,19 +159,8 @@ static void c63_encode_image(struct c63_common *cm)
     */
   startTrace2("quantize+dequantize");
 
-  pthread_mutex_lock(&cm->pth_mutex_dct_idct);
-  cm->pth_barrier_dct_idct = COLOR_COMPONENTS;
-  for (int i = 0; i < COLOR_COMPONENTS; ++i) {
-    cm->pth_pending_dct_idct[i] = 1;
-  }
-  pthread_cond_broadcast(&cm->pth_cond_dct_idct_ready);
-  pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
-
-  pthread_mutex_lock(&cm->pth_mutex_dct_idct);
-  while (cm->pth_barrier_dct_idct > 0) {
-    pthread_cond_wait(&cm->pth_cond_dct_idct_done, &cm->pth_mutex_dct_idct);
-  }
-  pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
 
   endTrace();
 
@@ -241,18 +239,21 @@ struct c63_common* init_c63_enc(int width, int height)
   c63_initialize_constant_values(cm);
   precompute_dctlookup_values();
 
-  pthread_mutex_init(&cm->pth_mutex_dct_idct, NULL);
-  pthread_cond_init(&cm->pth_cond_dct_idct_ready, NULL);
-  pthread_cond_init(&cm->pth_cond_dct_idct_done, NULL);
+  cm->pthreads_run = 1;
 
-  cm->pth_barrier_dct_idct = 0;
-  pthread_create(&cm->pth_dct_idct[Y_COMPONENT], NULL, pthread_dct_idct_Y, (void *) cm);
-  pthread_create(&cm->pth_dct_idct[U_COMPONENT], NULL, pthread_dct_idct_U, (void *) cm);
-  pthread_create(&cm->pth_dct_idct[V_COMPONENT], NULL, pthread_dct_idct_V, (void *) cm);
+  // +1 for main thread
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS + 1);
+
+  pthread_create(&threads[0], NULL, pthread_dct_idct_Y, (void *) cm);
+  pthread_create(&threads[1], NULL, pthread_dct_idct_U, (void *) cm);
+  pthread_create(&threads[2], NULL, pthread_dct_idct_V, (void *) cm);
 
   pthread_mutex_init(&cm->pth_mutex_write_frame, NULL);
   pthread_cond_init(&cm->pth_cond_write_frame, NULL);
-  pthread_create(&cm->pth_write_frame, NULL, pthread_write_frame, (void *) cm);
+  pthread_create(&threads[3], NULL, pthread_write_frame, (void *) cm);
+
+  atexit(cleanup_cm);
 
   return cm;
 }
@@ -368,21 +369,25 @@ int main(int argc, char **argv)
     }
   } while (cm->frame_buffer[cm->fb_curr_index] != NULL);
 
-  cm->frame_buffer[cm->fb_curr_index] = NULL;
-  cm->frame_buffer[(cm->fb_curr_index + 1) % FRAMEBUFFER_SIZE] = NULL;
   cm->unwritten_frame = cm->curframe;
   cm->curframe = NULL;
-
   pthread_cond_broadcast(&cm->pth_cond_write_frame);
-  pthread_cond_broadcast(&cm->pth_cond_dct_idct_ready);
 
-  pthread_cond_destroy(&cm->pth_cond_write_frame);
-  pthread_cond_destroy(&cm->pth_cond_dct_idct_ready);
+  cm->pthreads_run = 0;
 
-  pthread_join(cm->pth_write_frame, NULL);
-  for (int i=0; i<COLOR_COMPONENTS; i++) {
-    pthread_join(cm->pth_dct_idct[i], NULL);
+  // trigger final round for clean exit
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+
+  for (int i = 0; i < N_THREADS; i++) {
+    pthread_join(threads[i], NULL);
   }
+
+  pthread_mutex_destroy(&cm->pth_mutex_write_frame);
+  pthread_cond_destroy(&cm->pth_cond_write_frame);
+
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
 
   printf("Completed encoding! Encoded %d frames\n", numframes);
 

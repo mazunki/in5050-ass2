@@ -382,7 +382,7 @@ void *pthread_write_frame(void *ptr) {
     cm->unwritten_frame = NULL;
 
     pthread_mutex_unlock(&cm->pth_mutex_write_frame);
-  } while (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE+1] != NULL);
+  } while (cm->pthreads_run);
 
   // fprintf(stderr, "pthread write_frame finished\n");
   return NULL;

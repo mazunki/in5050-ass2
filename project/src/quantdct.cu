@@ -3,6 +3,7 @@
 #include "common.h"
 #include "quantdct.h"
 #include "profiling.h"
+#include <pthread.h>
 
 /** quantize (slow CPU-only function)
  *   @param[in]  orig
@@ -98,20 +99,16 @@ void dct_idct_V(struct c63_common *cm) {
 }
 
 // pthread wrappers
-void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
-  do {
-    pthread_mutex_lock(&cm->pth_mutex_dct_idct);
-    while (!cm->pth_pending_dct_idct[component] && cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] != NULL) {
-      pthread_cond_wait(&cm->pth_cond_dct_idct_ready, &cm->pth_mutex_dct_idct);
-    }
+void *dct_idct_worker(struct c63_common *cm, intptr_t component)
+{
+  while (true) {
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
 
-    if (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] == NULL) {
-      pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+    // shutdown from main thread
+    if (!cm->pthreads_run) {
+      pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
       break;
     }
-
-    cm->pth_pending_dct_idct[component] = false;
-    pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
     switch (component) {
       case Y_COMPONENT: dct_idct_Y(cm); break;
@@ -119,16 +116,9 @@ void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
       case V_COMPONENT: dct_idct_V(cm); break;
     }
 
-    pthread_mutex_lock(&cm->pth_mutex_dct_idct);
-    cm->pth_barrier_dct_idct--;
-    if (cm->pth_barrier_dct_idct == 0) {
-      pthread_cond_signal(&cm->pth_cond_dct_idct_done);
-    }
-    pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  }
 
-  } while (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] != NULL);
-
-  // fprintf(stderr, "pthread dct_idct_worker finished\n");
   return NULL;
 }
 

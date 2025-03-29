@@ -145,13 +145,13 @@ struct c63_common
   yuv_t *frame_buffer[FRAMEBUFFER_SIZE];
   int fb_curr_index;
 
-  pthread_t pth_dct_idct[COLOR_COMPONENTS];
-  pthread_mutex_t pth_mutex_dct_idct;
-  pthread_cond_t pth_cond_dct_idct_ready, pth_cond_dct_idct_done;
-  int pth_pending_dct_idct[COLOR_COMPONENTS];
-  int pth_barrier_dct_idct;
+  int pthreads_run;
 
-  pthread_t pth_write_frame;
+  //pthread_t pth_dct_idct[COLOR_COMPONENTS];
+  pthread_barrier_t pth_barrier_dct_idct_start;
+  pthread_barrier_t pth_barrier_dct_idct_end;
+
+  //pthread_t pth_write_frame;
   pthread_mutex_t pth_mutex_write_frame;
   pthread_cond_t pth_cond_write_frame;
   int pth_pending_write_frame;
