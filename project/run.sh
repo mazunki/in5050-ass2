@@ -77,7 +77,7 @@ pipeline() {
 	# runner "cd '${WORKDIR}' && ${cmd_dec}" || { echo "runner decoder failed with errno $?"; exit 2; }
 
 	echo "[PIPELINE] fetching profiling report..."
-  (set -x; rm -r ../workdir)
+  (set -x; rm -r ../workdir || true)
 	(set -x; rsync -av --progress "$RUNNER:$WORKDIR/" "../workdir/")
 }
 
