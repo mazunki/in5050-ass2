@@ -344,9 +344,7 @@ void parse_sof0(struct c63_common *cm)
     cm->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
 
     c63_initialize_constant_values(cm);
-    precompute_dctlookup_values();
-
-    cm->curframe = 0;
+    initialize_dctlookup_values();
   }
 
   /* Advance to next frame */
@@ -508,8 +506,8 @@ int main(int argc, char **argv)
 
   c63_common *cm = (c63_common*)calloc(1, sizeof(*cm));
   cm->e_ctx.fp = fin;
-  parse_c63_frame(cm); // initializes c63_common
 
+  parse_c63_frame(cm); // initializes c63_common
   rewind(fin);
 
   cm->pthreads_run = 1;

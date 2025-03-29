@@ -16,15 +16,13 @@
 extern "C" {
 #endif // __cplusplus
 
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, uint8_t *out_data, uint8_t *quantization);
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height, uint8_t *out_data, const uint8_t *quant_tbl);
 
 void dequantize_idct_Y(struct c63_common *cm);
 void dequantize_idct_U(struct c63_common *cm);
 void dequantize_idct_V(struct c63_common *cm);
 
-void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, int16_t *out_data, uint8_t *quantization);
+void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height, int16_t *out_data, const uint8_t *quant_tbl);
 
 void dct_quantize_Y(struct c63_common *cm);
 void dct_quantize_U(struct c63_common *cm);
@@ -42,7 +40,8 @@ void dct_idct_V(struct c63_common *cm);
 void *pthread_dct_idct_V(void *ptr);
 void *pthread_idct_V(void *ptr);
 
-void precompute_dctlookup_values();
+void initialize_dctlookup_values();
+void initialize_quantization_values(const uint8_t *tbl);
 
 #ifdef __cplusplus
 }

@@ -9,7 +9,9 @@
 #include <string.h>
 
 #include <arm_neon.h>
+#include <threads.h>
 
+#include "c63.h"
 #include "common.h"
 #include "tables.h"
 
@@ -26,7 +28,10 @@ static quant16_t precalcIdct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SI
 static quant16_t precalcDct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
 static quant16_t ISQRT2_Q16;
 
-void precompute_dctlookup_values() {
+thread_local static uint8_t quant_tbl_sh[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static float dequant_tbl_sh[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+
+void initialize_dctlookup_values() {
   quant16_t dctlookup_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE];
   ISQRT2_Q16 = (quant16_t)(ISQRT2 * (1 << DCT_SCALE_BITS) + 0.5f);
 
@@ -56,6 +61,15 @@ void precompute_dctlookup_values() {
         }
       }
     }
+  }
+
+}
+
+void initialize_quantization_values(const uint8_t *tbl)
+{
+  for (int i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; i++) {
+    quant_tbl_sh[i] = tbl[i];
+    dequant_tbl_sh[i] = 1.0f / (float)tbl[i];
   }
 }
 

@@ -237,7 +237,7 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->fb_curr_index = 0;
 
   c63_initialize_constant_values(cm);
-  precompute_dctlookup_values();
+  initialize_dctlookup_values();
 
   cm->pthreads_run = 1;
 
