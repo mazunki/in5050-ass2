@@ -109,12 +109,18 @@ static void scale_block(const float32_t *in, float32_t *out)
   for (v = 0; v < MACROBLOCK_SIZE; ++v) {
     for (u = 0; u < MACROBLOCK_SIZE; ++u) {
       float pixel = in[v * MACROBLOCK_SIZE + u];
+      quant32_t pixel_q32 = (quant32_t)roundf(pixel * (1 << DCT_SCALE_BITS));
 
       float a1 = !u ? ISQRT2 : 1.0f;
       float a2 = !v ? ISQRT2 : 1.0f;
       float scale = a1*a2;
+      quant16_t scale_q16 = (quant16_t)roundf(scale * (1 << DCT_SCALE_BITS));
 
-      float scaled = pixel * scale;
+      // q32 * q16 = q48 → store in q64, scale down to q32
+      quant64_t scaled_q64 = (quant64_t)pixel_q32 * scale_q16;
+      quant32_t scaled_q32 = scaled_q64 >> DCT_SCALE_BITS;
+
+      float32_t scaled =  (float32_t)scaled_q32 / (float)(1 << DCT_SCALE_BITS);
       out[v * MACROBLOCK_SIZE + u] = scaled;
     }
   }
