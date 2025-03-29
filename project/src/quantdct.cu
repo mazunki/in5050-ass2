@@ -16,7 +16,7 @@ void dct_quantize_Y(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct Y");
-  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
+  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct);
   endTrace();
 }
 void dct_quantize_U(struct c63_common *cm) {
@@ -25,7 +25,7 @@ void dct_quantize_U(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct U");
-  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct, cm->quanttbl[U_COMPONENT]);
+  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct);
   endTrace();
 }
 void dct_quantize_V(struct c63_common *cm) {
@@ -34,7 +34,7 @@ void dct_quantize_V(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct V");
-  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct, cm->quanttbl[V_COMPONENT]);
+  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct);
   endTrace();
 }
 
@@ -45,7 +45,7 @@ void dct_quantize_V(struct c63_common *cm) {
  */
 void dequantize_idct_Y(struct c63_common *cm) {
   startTrace5("idct Y");
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
+  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y);
   endTrace();
 
   if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
@@ -54,7 +54,7 @@ void dequantize_idct_Y(struct c63_common *cm) {
 }
 void dequantize_idct_U(struct c63_common *cm) {
   startTrace5("idct U");
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
+  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U);
   endTrace();
 
   if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
@@ -63,7 +63,7 @@ void dequantize_idct_U(struct c63_common *cm) {
 }
 void dequantize_idct_V(struct c63_common *cm) {
   startTrace5("idct V");
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V);
   endTrace();
 
   if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
@@ -74,6 +74,12 @@ void dequantize_idct_V(struct c63_common *cm) {
 // pthread wrappers
 void *dct_idct_worker(struct c63_common *cm, intptr_t component, bool dequantize_only)
 {
+  switch (component) {
+    case Y_COMPONENT: initialize_quantization_values(cm->quanttbl[Y_COMPONENT], cm->ypw, cm->yph); break;
+    case U_COMPONENT: initialize_quantization_values(cm->quanttbl[U_COMPONENT], cm->upw, cm->uph); break;
+    case V_COMPONENT: initialize_quantization_values(cm->quanttbl[V_COMPONENT], cm->vpw, cm->vph); break;
+  }
+
   while (true) {
     pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
 
