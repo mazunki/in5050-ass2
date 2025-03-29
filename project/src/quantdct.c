@@ -68,7 +68,6 @@ static void dct_2d(const float *in, float *out)
 static void idct_2d(const float *in, float *out)
 {
   startTrace8("idct 2d");
-
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
       float dct = 0.0f;
@@ -91,25 +90,27 @@ static void idct_2d(const float *in, float *out)
   endTrace();
 }
 
-static void scale_block(float *in_data, float *out_data)
+static void scale_block(const float32_t *in, float32_t *out)
 {
   startTrace8("scaleblk");
   int u, v;
 
   for (v = 0; v < MACROBLOCK_SIZE; ++v) {
     for (u = 0; u < MACROBLOCK_SIZE; ++u) {
+      float pixel = in[v * MACROBLOCK_SIZE + u];
+
       float a1 = !u ? ISQRT2 : 1.0f;
       float a2 = !v ? ISQRT2 : 1.0f;
+      float scale = a1*a2;
 
-      /* Scale according to normalizing function */
-      out_data[v * MACROBLOCK_SIZE + u] =
-          in_data[v * MACROBLOCK_SIZE + u] * a1 * a2;
+      float scaled = pixel * scale;
+      out[v * MACROBLOCK_SIZE + u] = scaled;
     }
   }
   endTrace();
 }
 
-static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+static void quantize_block(const float *in, float *out, const uint8_t *quant_tbl)
 {
   startTrace8("quant blk");
   int zigzag;
@@ -118,15 +119,15 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
 
-    float dct = in_data[v * 8 + u];
+    float dct = in[v * 8 + u];
 
     /* Zig-zag and quantize */
-    out_data[zigzag] = (float)round((dct / 4.0) / quant_tbl[zigzag]);
+    out[zigzag] = (float)round((dct / 4.0) / quant_tbl[zigzag]);
   }
   endTrace();
 }
 
-static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+static void dequantize_block(const float *in, float *out, const uint8_t *quant_tbl)
 {
   startTrace8("deq blk");
   int zigzag;
@@ -135,15 +136,15 @@ static void dequantize_block(float *in_data, float *out_data, uint8_t *quant_tbl
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
 
-    float dct = in_data[zigzag];
+    float dct = in[zigzag];
 
     /* Zig-zag and de-quantize */
-    out_data[v * 8 + u] = (float)round((dct * quant_tbl[zigzag]) / 4.0);
+    out[v * 8 + u] = (float)round((dct * quant_tbl[zigzag]) / 4.0);
   }
   endTrace();
 }
 
-static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+static void dct_quant_block_8x8(const int16_t *in, int16_t *out, const uint8_t *quant_tbl)
 {
   startTrace7("quant 8x8");
 
@@ -151,7 +152,7 @@ static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *qu
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb[i] = in_data[i];
+    mb[i] = in[i];
   }
 
   dct_2d(mb, mb2);
@@ -159,13 +160,13 @@ static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *qu
   quantize_block(mb, mb2, quant_tbl);
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    out_data[i] = mb2[i];
+    out[i] = mb2[i];
   }
 
   endTrace();
 }
 
-static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t *quant_tbl)
+static void dequant_idct_block_8x8(const int16_t *in, int16_t *out, const uint8_t *quant_tbl)
 {
   startTrace7("deq 8x8");
 
@@ -173,7 +174,7 @@ static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t 
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb[i] = in_data[i];
+    mb[i] = in[i];
   }
 
   dequantize_block(mb, mb2, quant_tbl);
@@ -181,13 +182,13 @@ static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data, uint8_t 
   idct_2d(mb, mb2);
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    out_data[i] = mb2[i];
+    out[i] = mb2[i];
   }
 
   endTrace();
 }
 
-static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h, int y, uint8_t *out_data, uint8_t *quantization)
+static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, int w, int h, int y, uint8_t *out, const uint8_t *quant_tbl)
 {
   startTrace6("deq row");
   int x;
@@ -198,7 +199,7 @@ static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, in
   for (x = 0; x < w; x += MACROBLOCK_SIZE) {
     int i, j;
 
-    dequant_idct_block_8x8(in_data + (x * MACROBLOCK_SIZE), block, quantization);
+    dequant_idct_block_8x8(in + (x * MACROBLOCK_SIZE), block, quant_tbl);
 
     for (i = 0; i < MACROBLOCK_SIZE; ++i) {
       for (j = 0; j < MACROBLOCK_SIZE; ++j) {
@@ -212,14 +213,14 @@ static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, in
           tmp = 255;
         }
 
-        out_data[i * w + j + x] = tmp;
+        out[i * w + j + x] = tmp;
       }
     }
   }
   endTrace();
 }
 
-static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h, int16_t *out_data, uint8_t *quantization)
+static void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int w, int h, int16_t *out, const uint8_t *quant_tbl)
 {
   startTrace6("quant row");
   int x;
@@ -233,35 +234,35 @@ static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h
     for (i = 0; i < MACROBLOCK_SIZE; ++i) {
       for (j = 0; j < MACROBLOCK_SIZE; ++j) {
         block[i * MACROBLOCK_SIZE + j] =
-            ((int16_t)in_data[i * w + j + x] - prediction[i * w + j + x]);
+            ((int16_t)in[i * w + j + x] - prediction[i * w + j + x]);
       }
     }
 
     /* Store MBs linear in memory, i.e. the 64 coefficients are stored
        continous. This allows us to ignore stride in DCT/iDCT and other
        functions. */
-    dct_quant_block_8x8(block, out_data + (x * MACROBLOCK_SIZE), quantization);
+    dct_quant_block_8x8(block, out + (x * MACROBLOCK_SIZE), quant_tbl);
   }
   endTrace();
 }
 
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width, uint32_t height, uint8_t *out_data, uint8_t *quantization)
+void dequantize_idct(const int16_t *in, uint8_t *prediction, uint32_t width, uint32_t height, uint8_t *out, const uint8_t *quant_tbl)
 {
   int y;
 
   for (y = 0; y < height; y += MACROBLOCK_SIZE) {
-    dequantize_idct_row(in_data + y * width, prediction + y * width, width,
-                        height, y, out_data + y * width, quantization);
+    dequantize_idct_row(in + y * width, prediction + y * width, width,
+                        height, y, out + y * width, quant_tbl);
   }
 }
 
 
-void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-                  uint32_t height, int16_t *out_data, uint8_t *quantization) {
+void dct_quantize(const uint8_t *in, uint8_t *prediction, uint32_t width, uint32_t height, int16_t *out, const uint8_t *quant_tbl)
+{
   int y;
 
   for (y = 0; y < height; y += MACROBLOCK_SIZE) {
-    dct_quantize_row(in_data + y * width, prediction + y * width, width, height,
-                     out_data + y * width, quantization);
+    dct_quantize_row(in + y * width, prediction + y * width, width, height,
+                     out + y * width, quant_tbl);
   }
 }
