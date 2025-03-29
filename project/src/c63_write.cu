@@ -366,14 +366,11 @@ void write_frame(struct c63_common *cm, frame *f)
 void *pthread_write_frame(void *ptr) {
   struct c63_common *cm = (struct c63_common *) ptr;
 
-  yuv_t *next_frame;
   do {
-    next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
-
     pthread_mutex_lock(&cm->pth_mutex_write_frame);
     pthread_cond_wait(&cm->pth_cond_write_frame, &cm->pth_mutex_write_frame);
 
-    if (cm->curframe == NULL) {
+    if (cm->unwritten_frame == NULL) {
       pthread_mutex_unlock(&cm->pth_mutex_write_frame);
       break;
     }
@@ -382,8 +379,11 @@ void *pthread_write_frame(void *ptr) {
     write_frame(cm, cm->unwritten_frame);
     endTrace();
 
-    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
-  } while (next_frame != NULL);
+    cm->unwritten_frame = NULL;
 
+    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+  } while (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE+1] != NULL);
+
+  // fprintf(stderr, "pthread write_frame finished\n");
   return NULL;
 }

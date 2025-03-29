@@ -99,16 +99,13 @@ void dct_idct_V(struct c63_common *cm) {
 
 // pthread wrappers
 void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
-  yuv_t *next_frame;
   do {
-    next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
-
     pthread_mutex_lock(&cm->pth_mutex_dct_idct);
-    while (!cm->pth_pending_dct_idct[component] && next_frame != NULL) {
+    while (!cm->pth_pending_dct_idct[component] && cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] != NULL) {
       pthread_cond_wait(&cm->pth_cond_dct_idct_ready, &cm->pth_mutex_dct_idct);
     }
 
-    if (next_frame == NULL) {
+    if (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] == NULL) {
       pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
       break;
     }
@@ -129,8 +126,9 @@ void *dct_idct_worker(struct c63_common *cm, intptr_t component) {
     }
     pthread_mutex_unlock(&cm->pth_mutex_dct_idct);
 
-  } while (next_frame != NULL);
+  } while (cm->frame_buffer[(cm->fb_curr_index) % FRAMEBUFFER_SIZE] != NULL);
 
+  // fprintf(stderr, "pthread dct_idct_worker finished\n");
   return NULL;
 }
 

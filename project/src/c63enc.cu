@@ -363,14 +363,28 @@ int main(int argc, char **argv)
     cm->fb_curr_index = fb_next;
     ++numframes;
 
-    if (limit_numframes && numframes >= limit_numframes) { break; }
+    if (limit_numframes && numframes >= limit_numframes) {
+      break;
+    }
   } while (cm->frame_buffer[cm->fb_curr_index] != NULL);
 
+  cm->frame_buffer[cm->fb_curr_index] = NULL;
+  cm->frame_buffer[(cm->fb_curr_index + 1) % FRAMEBUFFER_SIZE] = NULL;
+  cm->unwritten_frame = cm->curframe;
+  cm->curframe = NULL;
+
+  pthread_cond_broadcast(&cm->pth_cond_write_frame);
+  pthread_cond_broadcast(&cm->pth_cond_dct_idct_ready);
+
+  pthread_cond_destroy(&cm->pth_cond_write_frame);
+  pthread_cond_destroy(&cm->pth_cond_dct_idct_ready);
+
   pthread_join(cm->pth_write_frame, NULL);
+  for (int i=0; i<COLOR_COMPONENTS; i++) {
+    pthread_join(cm->pth_dct_idct[i], NULL);
+  }
 
   printf("Completed encoding! Encoded %d frames\n", numframes);
-
-
 
   free_c63_enc(cm);
   fclose(outfile);
