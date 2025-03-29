@@ -41,14 +41,14 @@ void precompute_dctlookup_values() {
           quant16_t cxu = dctlookup_q16[x][u];
           quant16_t cyv = dctlookup_q16[y][v];
 
-          // q16 * q16 = q32 → shift down to Q16
+          // q16 * q16 = q32 → shift down to q16
           quant16_t dct_coeff_q16 = ((quant32_t)cxu * cyv) >> DCT_SCALE_BITS;
           precalcDct_q16[y][v][u][x] = dct_coeff_q16;
 
           quant16_t cux = dctlookup_q16[u][x];
           quant16_t cvy = dctlookup_q16[v][y];
 
-          // q16 * q16 = q32 → shift down to Q16
+          // q16 * q16 = q32 → shift down to q16
           quant16_t idct_coeff_q16 = ((quant32_t)cux * cvy) >> DCT_SCALE_BITS;
           precalcIdct_q16[y][v][u][x] = idct_coeff_q16;
         }
@@ -69,7 +69,7 @@ static void dct_2d(const quant32_t *in, quant32_t *out)
           quant32_t pixel_q32 = in[y*MACROBLOCK_SIZE + x];
           quant16_t coeff_q16 = precalcDct_q16[y][v][u][x];
 
-          // q16 * q16 = q32, accumulate in Q64
+          // q32 * q16 = q48, accumulate in q64
           dct_q64 += (quant64_t)pixel_q32 * coeff_q16;
         }
       }
@@ -91,7 +91,7 @@ static void idct_2d(const quant32_t *in, quant32_t *out)
           quant32_t pixel_q32 = in[y*MACROBLOCK_SIZE + x];
           quant16_t coeff_q16 = precalcIdct_q16[y][v][u][x];
 
-          // q16 * q16 = q32, accumulate in Q64
+          // q32 * q16 = q48, accumulate in q64
           idct_q64 += (quant64_t)pixel_q32 * coeff_q16;
         }
       }
