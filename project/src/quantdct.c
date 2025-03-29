@@ -52,7 +52,7 @@ static void dct_2d(const float *in, float *out)
   startTrace8("dct 2d");
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float16x8_t dct = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      float16x8_t dct = vdupq_n_f16(0.0f);
 
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
 
@@ -75,7 +75,7 @@ static void idct_2d(const float *in, float *out)
   startTrace8("idct 2d");
   for (int v = 0; v < MACROBLOCK_SIZE; v++) {
     for (int u = 0; u < MACROBLOCK_SIZE; u++) {
-      float16x8_t idct = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      float16x8_t idct = vdupq_n_f16(0.0f);
 
       for (int y = 0; y < MACROBLOCK_SIZE; y++) {
 
