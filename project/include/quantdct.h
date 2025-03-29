@@ -32,12 +32,15 @@ void dct_quantize_V(struct c63_common *cm);
 
 void dct_idct_Y(struct c63_common *cm);
 void *pthread_dct_idct_Y(void *ptr);
+void *pthread_idct_Y(void *ptr);
 
 void dct_idct_U(struct c63_common *cm);
 void *pthread_dct_idct_U(void *ptr);
+void *pthread_idct_U(void *ptr);
 
 void dct_idct_V(struct c63_common *cm);
 void *pthread_dct_idct_V(void *ptr);
+void *pthread_idct_V(void *ptr);
 
 void precompute_dctlookup_values();
 
