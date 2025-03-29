@@ -24,9 +24,11 @@ typedef int64_t quant64_t;
 
 static quant16_t precalcIdct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
 static quant16_t precalcDct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
+static quant16_t ISQRT2_Q16;
 
 void precompute_dctlookup_values() {
   quant16_t dctlookup_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE];
+  ISQRT2_Q16 = (quant16_t)(ISQRT2 * (1 << DCT_SCALE_BITS) + 0.5f);
 
   for (int u = 0; u < MACROBLOCK_SIZE; u++) {
     for (int v = 0; v < MACROBLOCK_SIZE; v++) {
@@ -110,14 +112,12 @@ static void scale_block(const quant32_t *in, quant32_t *out)
     for (u = 0; u < MACROBLOCK_SIZE; ++u) {
       quant32_t pixel_q32 = in[v * MACROBLOCK_SIZE + u];
 
-      float a1 = !u ? ISQRT2 : 1.0f;
-      float a2 = !v ? ISQRT2 : 1.0f;
-      float scale = a1*a2;
-      quant16_t scale_q16 = (quant16_t)roundf(scale * (1 << DCT_SCALE_BITS));
+      quant16_t a1_q16 = u ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
+      quant16_t a2_q16 = v ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
+      quant32_t scale_q32 = ((quant32_t)a1_q16 * a2_q16) >> DCT_SCALE_BITS;
 
-      // q32 * q32 = q64 → store in q64, scale down to q32
-      quant64_t scaled_q64 = (quant64_t)pixel_q32 * scale_q16;
-      quant32_t scaled_q32 = scaled_q64 >> DCT_SCALE_BITS;
+      // q32 * q32 = q64 → q64, scale down to q32
+      quant32_t scaled_q32 = ((quant64_t)pixel_q32 * scale_q32) >> DCT_SCALE_BITS;
 
       out[v * MACROBLOCK_SIZE + u] = scaled_q32;
     }
