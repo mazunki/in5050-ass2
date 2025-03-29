@@ -17,6 +17,15 @@
 
 #include "profiling.h"
 
+#define N_THREADS COLOR_COMPONENTS
+static pthread_t threads[N_THREADS];
+void cleanup_cm(void) {
+  for (int i=0; i < N_THREADS; i++) {
+    pthread_cancel(threads[i]);
+  }
+}
+
+
 /* Decode VLC token */
 static uint8_t get_vlc_token(struct entropy_ctx *c, uint16_t *table,
     uint8_t *table_sz, int tablelen)
@@ -421,7 +430,6 @@ int parse_c63_frame(struct c63_common *cm)
 void decode_c63_frame(struct c63_common *cm, FILE *fout)
 {
   startTrace2("Decode image");
-
   if (!cm->curframe->keyframe) {
 
     CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[Y_COMPONENT], cm->pipe->d_mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
@@ -456,18 +464,11 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
     *   @param[in]  predicted
     *   @param[out] recons
     */
-  startTrace3("Dequantization");
-  startTrace4("idct Y");
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-  endTrace();
+  startTrace2("dequantize");
 
-  startTrace4("idct U");
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-  endTrace();
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
 
-  startTrace4("idct V");
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-  endTrace();
   endTrace();
 
   startTrace3("Dump image");
@@ -511,11 +512,24 @@ int main(int argc, char **argv)
 
   rewind(fin);
 
+  cm->pthreads_run = 1;
+
+  // +1 for main thread
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS + 1);
+
+  pthread_create(&threads[0], NULL, pthread_idct_Y, (void *) cm);
+  pthread_create(&threads[1], NULL, pthread_idct_U, (void *) cm);
+  pthread_create(&threads[2], NULL, pthread_idct_V, (void *) cm);
+
+  atexit(cleanup_cm);
+
+
   int framenum = 0;
   while(fpeek(fin) != EOF)
   {
     startTrace1("Decode frame");
-    DEBUG("Decoding frame %d", framenum);
+    // DEBUG("Decoding frame %d", framenum);
     cm->curframe = prepare_next_frame(cm);
 
     /**
@@ -542,6 +556,20 @@ int main(int argc, char **argv)
     framenum++;
     endTrace();
   }
+
+  cm->pthreads_run = 0;
+
+  // trigger final round for clean exit
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+
+  for (int i = 0; i < N_THREADS; i++) {
+    pthread_join(threads[i], NULL);
+  }
+
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
+
   c63_pipeline_free(cm->pipe);
   free(cm);
 
