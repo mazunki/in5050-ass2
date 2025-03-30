@@ -28,8 +28,8 @@ static quant16_t precalcIdct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SI
 static quant16_t precalcDct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
 static quant16_t ISQRT2_Q16;
 
-thread_local static uint8_t QUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
-thread_local static float DEQUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static float32_t QUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static float32_t DEQUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
 thread_local static uint32_t HEIGHT, WIDTH;
 
 void initialize_dctlookup_values() {
@@ -72,8 +72,11 @@ void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t 
   HEIGHT = padh;
 
   for (int i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; i++) {
-    QUANT_TBL[i] = tbl[i];
-    DEQUANT_TBL[i] = 1.0f / (float)tbl[i];
+    // out[zigzag] = (float)round((dct / 4.0) / QUANT_TBL[zigzag]);
+    QUANT_TBL[i] = 1.0f / (4.0f * tbl[i]);
+
+    // out[v * 8 + u] = (float)round((dct * QUANT_TBL[zigzag]) / 4.0);
+    DEQUANT_TBL[i] = tbl[i] / 4.0f;
   }
 }
 
@@ -143,7 +146,7 @@ static void scale_block(const quant32_t *in, quant32_t *out)
   endTrace();
 }
 
-static void quantize_block(const float *in, float *out)
+static void quantize_block(const float32_t *in, float32_t *out)
 {
   startTrace8("quant blk");
   int zigzag;
@@ -152,15 +155,16 @@ static void quantize_block(const float *in, float *out)
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
 
-    float dct = in[v * 8 + u];
-
     /* Zig-zag and quantize */
-    out[zigzag] = (float)round((dct / 4.0) / QUANT_TBL[zigzag]);
+    float32_t dct = in[v * 8 + u];
+    float32_t quantized = dct * QUANT_TBL[zigzag];
+
+    out[zigzag] = quantized;
   }
   endTrace();
 }
 
-static void dequantize_block(const float *in, float *out)
+static void dequantize_block(const float32_t *in, float32_t *out)
 {
   startTrace8("deq blk");
   int zigzag;
@@ -169,10 +173,11 @@ static void dequantize_block(const float *in, float *out)
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
 
-    float dct = in[zigzag];
-
     /* Zig-zag and de-quantize */
-    out[v * 8 + u] = (float)round((dct * QUANT_TBL[zigzag]) / 4.0);
+    float32_t dct = in[zigzag];
+    float32_t dequantized = dct * DEQUANT_TBL[zigzag];
+
+    out[v * 8 + u] = dequantized;
   }
   endTrace();
 }
