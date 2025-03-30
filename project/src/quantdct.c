@@ -21,6 +21,7 @@
 
 static float16x8_t precalcIdct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
 static float16x8_t precalcDct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
+static uint8_t linearZigzag[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
 
 thread_local static float32_t QUANT_TBL_f32[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
 thread_local static float32_t DEQUANT_TBL_f32[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
@@ -49,6 +50,14 @@ void initialize_dctlookup_values() {
          precalcDct[v][u][y] = vcvt_high_f16_f32(lower_dct, upper_dct);
        }
      }
+   }
+   endTrace();
+
+   startTrace3("precompute zigzag");
+   for (int i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; ++i) {
+     int u = zigzag_U[i];
+     int v = zigzag_V[i];
+     linearZigzag[v * MACROBLOCK_SIZE + u] = i;
    }
    endTrace();
 }
@@ -115,21 +124,11 @@ static void dct_quant_block_8x8(const int16_t *in, int16_t *out)
 
   // static void quantize_block(float *in_data, float *out_data)
   startTrace8("quant blk");
-  for (uint8_t zigzag = 0; zigzag < MACROBLOCK_SIZE * MACROBLOCK_SIZE; ++zigzag) {
-    uint8_t u = zigzag_U[zigzag];
-    uint8_t v = zigzag_V[zigzag];
-
-    float dct = mb[v * 8 + u];
-    float32_t quantized = dct * QUANT_TBL_f32[zigzag];
-
-    /* Zig-zag and quantize */
-    mb2[zigzag] = quantized;
+  for (uint8_t i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; ++i) {
+    uint8_t z = linearZigzag[i];
+    out[z] = mb[i] * QUANT_TBL_f32[z];
   }
   endTrace();
-
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    out[i] = mb2[i];
-  }
 
   endTrace();
 }
