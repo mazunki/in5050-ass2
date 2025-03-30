@@ -188,15 +188,11 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
         idct = vaddq_f16(idct, vmulq_f16(in_vec, precalcIdct[v][u][y])); //  idct += (in * precalc)
       }
 
-      mb2[v * MACROBLOCK_SIZE + u] = vaddvq_f32(vcvt_high_f32_f16(idct)) +
+      out[v * MACROBLOCK_SIZE + u] = vaddvq_f32(vcvt_high_f32_f16(idct)) +
                                       vaddvq_f32(vcvt_f32_f16(*(float16x4_t*)&idct));
     }
   }
   endTrace();
-
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    out[i] = mb2[i];
-  }
 
   endTrace();
 }
