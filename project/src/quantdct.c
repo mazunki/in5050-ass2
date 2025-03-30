@@ -146,15 +146,9 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
 
   // static void dequantize_block(float *in_data, float *out_data)
   startTrace8("deq blk");
-  for (uint8_t zigzag = 0; zigzag < MACROBLOCK_SIZE * MACROBLOCK_SIZE; ++zigzag) {
-    uint8_t u = zigzag_U[zigzag];
-    uint8_t v = zigzag_V[zigzag];
-
-    float idct = mb[zigzag];
-    float32_t dequantized = idct * DEQUANT_TBL_f32[zigzag];
-
-    /* Zig-zag and de-quantize */
-    mb2[v * 8 + u] = dequantized;
+  for (uint8_t i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; ++i) {
+    uint8_t z = linearZigzag[i];
+    mb2[z] = mb[i] * DEQUANT_TBL_f32[z];
   }
   endTrace();
 
