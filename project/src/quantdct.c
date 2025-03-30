@@ -148,7 +148,7 @@ static void scale_block(const quant32_t *in, quant32_t *out)
   endTrace();
 }
 
-static void quantize_block(const float32_t *in, float32_t *out)
+static void quantize_block(const quant32_t *in, quant32_t *out)
 {
   startTrace8("quant blk");
   int zigzag;
@@ -158,18 +158,16 @@ static void quantize_block(const float32_t *in, float32_t *out)
     uint8_t v = zigzag_V[zigzag];
 
     /* Zig-zag and quantize */
-    float32_t dct = in[v * 8 + u];
-    quant32_t dct_q32 = (quant32_t)roundf(dct * (1 << DCT_SCALE_BITS));
+    quant32_t dct_q32 = in[v * 8 + u];
 
     quant32_t quantized_q32 = ((quant64_t)dct_q32 * QUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
-    float32_t quantized =  (float32_t)quantized_q32 / (float)(1 << DCT_SCALE_BITS);
 
-    out[zigzag] = quantized;
+    out[zigzag] = quantized_q32;
   }
   endTrace();
 }
 
-static void dequantize_block(const float32_t *in, float32_t *out)
+static void dequantize_block(const quant32_t *in, quant32_t *out)
 {
   startTrace8("deq blk");
   int zigzag;
@@ -179,13 +177,11 @@ static void dequantize_block(const float32_t *in, float32_t *out)
     uint8_t v = zigzag_V[zigzag];
 
     /* Zig-zag and de-quantize */
-    float32_t dct = in[zigzag];
-    quant32_t dct_q32 = (quant32_t)roundf(dct * (1 << DCT_SCALE_BITS));
+    quant32_t dct_q32 = in[zigzag];
 
     quant32_t dequantized_q32 = ((quant32_t)dct_q32 * DEQUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
-    float32_t dequantized =  (float32_t)dequantized_q32 / (float)(1 << DCT_SCALE_BITS);
 
-    out[v * 8 + u] = dequantized;
+    out[v * 8 + u] = dequantized_q32;
   }
   endTrace();
 }
@@ -206,14 +202,10 @@ static void dct_quant_block_8x8(const int16_t *in, int16_t *out)
 
   dct_2d(mb_q32, mb2_q32);
   scale_block(mb2_q32, mb_q32);
+  quantize_block(mb_q32, mb2_q32);
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb[i] = (float32_t)mb_q32[i] / (float)(1 << (2 * DCT_SCALE_BITS));
-  }
-
-  quantize_block(mb, mb2);
-
-  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
+    mb2[i] = (float32_t)mb2_q32[i] / (float)(1 << (2 * DCT_SCALE_BITS));
     out[i] = mb2[i];
   }
 
@@ -231,15 +223,10 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
 
   for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
     mb[i] = in[i];
+    mb_q32[i] = (quant32_t)roundf(mb[i] * (1 << DCT_SCALE_BITS));
   }
 
-  dequantize_block(mb, mb2);
-
-  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    float32_t pixel = (float32_t) mb2[i];
-    mb2_q32[i] = (quant32_t)roundf(pixel * (1 << DCT_SCALE_BITS));
-  }
-
+  dequantize_block(mb_q32, mb2_q32);
   scale_block(mb2_q32, mb_q32);
   idct_2d(mb_q32, mb2_q32);
 
