@@ -28,8 +28,8 @@ static quant16_t precalcIdct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SI
 static quant16_t precalcDct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
 static quant16_t ISQRT2_Q16;
 
-thread_local static float32_t QUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
-thread_local static float32_t DEQUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static quant16_t QUANT_TBL_q16[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static quant16_t DEQUANT_TBL_q16[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
 thread_local static uint32_t HEIGHT, WIDTH;
 
 void initialize_dctlookup_values() {
@@ -73,10 +73,12 @@ void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t 
 
   for (int i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; i++) {
     // out[zigzag] = (float)round((dct / 4.0) / QUANT_TBL[zigzag]);
-    QUANT_TBL[i] = 1.0f / (4.0f * tbl[i]);
+    float32_t quant =  1.0f / (4.0f * tbl[i]);
+    QUANT_TBL_q16[i] = (quant16_t)roundf(quant * (1 << DCT_SCALE_BITS));
 
     // out[v * 8 + u] = (float)round((dct * QUANT_TBL[zigzag]) / 4.0);
-    DEQUANT_TBL[i] = tbl[i] / 4.0f;
+    float32_t dequant = tbl[i] / 4.0f;
+    DEQUANT_TBL_q16[i] = (quant16_t)roundf(dequant * (1 << DCT_SCALE_BITS));
   }
 }
 
@@ -157,7 +159,10 @@ static void quantize_block(const float32_t *in, float32_t *out)
 
     /* Zig-zag and quantize */
     float32_t dct = in[v * 8 + u];
-    float32_t quantized = dct * QUANT_TBL[zigzag];
+    quant32_t dct_q32 = (quant32_t)roundf(dct * (1 << DCT_SCALE_BITS));
+
+    quant32_t quantized_q32 = ((quant64_t)dct_q32 * QUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
+    float32_t quantized =  (float32_t)quantized_q32 / (float)(1 << DCT_SCALE_BITS);
 
     out[zigzag] = quantized;
   }
@@ -175,7 +180,10 @@ static void dequantize_block(const float32_t *in, float32_t *out)
 
     /* Zig-zag and de-quantize */
     float32_t dct = in[zigzag];
-    float32_t dequantized = dct * DEQUANT_TBL[zigzag];
+    quant32_t dct_q32 = (quant32_t)roundf(dct * (1 << DCT_SCALE_BITS));
+
+    quant32_t dequantized_q32 = ((quant32_t)dct_q32 * DEQUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
+    float32_t dequantized =  (float32_t)dequantized_q32 / (float)(1 << DCT_SCALE_BITS);
 
     out[v * 8 + u] = dequantized;
   }
