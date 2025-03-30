@@ -82,26 +82,6 @@ void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t 
   }
 }
 
-static void scale_block(const quant32_t *in, quant32_t *out)
-{
-  startTrace8("scaleblk");
-  for (uint8_t v = 0; v < MACROBLOCK_SIZE; ++v) {
-    for (uint8_t u = 0; u < MACROBLOCK_SIZE; ++u) {
-      quant32_t pixel_q32 = in[v * MACROBLOCK_SIZE + u];
-
-      quant16_t a1_q16 = u ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
-      quant16_t a2_q16 = v ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
-      quant32_t scale_q32 = ((quant32_t)a1_q16 * a2_q16) >> DCT_SCALE_BITS;
-
-      // q32 * q32 = q64 → q64, scale down to q32
-      quant32_t scaled_q32 = ((quant64_t)pixel_q32 * scale_q32) >> DCT_SCALE_BITS;
-
-      out[v * MACROBLOCK_SIZE + u] = scaled_q32;
-    }
-  }
-  endTrace();
-}
-
 static void dct_quant_block_8x8(const int16_t *in, int16_t *out)
 {
   startTrace7("quant 8x8");
