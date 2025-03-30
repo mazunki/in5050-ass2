@@ -211,19 +211,15 @@ static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, ui
     dequant_idct_block_8x8(in + (x * MACROBLOCK_SIZE), block);
 
     for (uint8_t i = 0; i < MACROBLOCK_SIZE; ++i) {
-      for (uint8_t j = 0; j < MACROBLOCK_SIZE; ++j) {
-        /* Add prediction block. Note: DCT is not precise -
-           Clamp to legal values */
-        int16_t tmp = block[i * MACROBLOCK_SIZE + j] + (int16_t)prediction[i * WIDTH + j + x];
+      int16x8_t row = vld1q_s16(block + i * MACROBLOCK_SIZE);
+      int16x8_t pred = vreinterpretq_s16_u16(vmovl_u8(vld1_u8(prediction + i * WIDTH + x)));
+      int16x8_t sum = vaddq_s16(row, pred);
 
-        if (tmp < 0) {
-          tmp = 0;
-        } else if (tmp > 255) {
-          tmp = 255;
-        }
+      // clamp result to [0, 255]
+      int16x8_t clamped = vmaxq_s16(vdupq_n_s16(0), vminq_s16(sum, vdupq_n_s16(255)));
 
-        out[i * WIDTH + j + x] = tmp;
-      }
+      uint8x8_t out_u8 = vmovn_u16(vreinterpretq_u16_s16(clamped));
+      vst1_u8(out + i * WIDTH + x, out_u8);
     }
   }
   endTrace();
