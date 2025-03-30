@@ -233,9 +233,14 @@ static void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int16_t *ou
   /* Perform the DCT and quantization */
   for (uint x = 0; x < WIDTH; x += MACROBLOCK_SIZE) {
     for (uint8_t i = 0; i < MACROBLOCK_SIZE; ++i) {
-      for (uint8_t j = 0; j < MACROBLOCK_SIZE; ++j) {
-        block[i * MACROBLOCK_SIZE + j] = ((int16_t)in[i * WIDTH + j + x] - prediction[i * WIDTH + j + x]);
-      }
+      uint8x8_t in_u8  = vld1_u8(in + i * WIDTH + x);
+      uint8x8_t pred_u8 = vld1_u8(prediction + i * WIDTH + x);
+
+      int16x8_t in_s16  = vreinterpretq_s16_u16(vmovl_u8(in_u8));
+      int16x8_t pred_s16 = vreinterpretq_s16_u16(vmovl_u8(pred_u8));
+      int16x8_t diff = vsubq_s16(in_s16, pred_s16);
+
+      vst1q_s16(block + i * MACROBLOCK_SIZE, diff);
     }
 
     /* Store MBs linear in memory, i.e. the 64 coefficients are stored
