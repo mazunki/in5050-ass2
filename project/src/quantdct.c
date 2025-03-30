@@ -238,7 +238,7 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
   endTrace();
 }
 
-static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, int y, uint8_t *out)
+static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, uint8_t *out)
 {
   startTrace6("deq row");
   uint32_t x;
@@ -300,7 +300,7 @@ void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out)
   int y;
 
   for (y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, y, out + y * WIDTH);
+    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
   }
 }
 
