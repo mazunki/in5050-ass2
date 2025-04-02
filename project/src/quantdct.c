@@ -113,10 +113,7 @@ static void dct_quant_block_8x8(const int16_t *in, int16_t *out)
   startTrace8("scaleblk");
   for (uint8_t v = 0; v < MACROBLOCK_SIZE; ++v) {
     for (uint8_t u = 0; u < MACROBLOCK_SIZE; ++u) {
-      float a1 = !u ? ISQRT2 : 1.0f;
-      float a2 = !v ? ISQRT2 : 1.0f;
-
-      float32_t scale = a1 * a2;
+      float32_t scale = (!u && !v) ? 0.5f : (u || v) ? ISQRT2 : 1.0f;
 
       /* Scale according to normalizing function */
       uint8_t i = v * MACROBLOCK_SIZE + u;
@@ -145,10 +142,7 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
   startTrace8("scaleblk");
   for (uint8_t v = 0; v < MACROBLOCK_SIZE; ++v) {
     for (uint8_t u = 0; u < MACROBLOCK_SIZE; ++u) {
-      float a1 = !u ? ISQRT2 : 1.0f;
-      float a2 = !v ? ISQRT2 : 1.0f;
-
-      float32_t scale = a1 * a2;
+      float32_t scale = (!u && !v) ? 0.5f : (u || v) ? ISQRT2 : 1.0f;
 
       /* Scale according to normalizing function */
       mb[v * MACROBLOCK_SIZE + u] = mb2[v * MACROBLOCK_SIZE + u] * scale;
