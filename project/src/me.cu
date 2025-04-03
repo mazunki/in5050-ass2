@@ -88,73 +88,103 @@ void c63_initialize_constant_values(struct c63_common *cm)
   * This value can then be used to pick the best match for any given
   * macroblock during motion estimation.
   */
-  __device__ int sad_block_8x8(uint8_t *blk1, uint8_t *blk2, int stride)
+  // Serial SAD computation — safe for small blocks
+  __device__ static int sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride)
   {
     int sad = 0;
     for (int i = 0; i < MACROBLOCK_SIZE; ++i)
     {
       for (int j = 0; j < MACROBLOCK_SIZE; ++j)
       {
-        sad += abs((int)blk1[i * stride + j] - (int)blk2[i * stride + j]);
+        sad += abs((int)block1[i * stride + j] - (int)block2[i * stride + j]);
       }
     }
     return sad;
   }
 
 
- __global__ void c63_motion_estimate_kernel(uint8_t *orig, uint8_t *ref, macroblock *mbs, int comp)
- {
-   int mb_x = blockIdx.x;
-   int mb_y = blockIdx.y;
-   int thread_id = threadIdx.y * blockDim.x + threadIdx.x;
+  // Perform motion estimation for a full macroblock
+  __device__ static void me_block_8x8(struct macroblock *mb, int mb_x, int mb_y,
+                                      uint8_t *orig, uint8_t *ref, int padw, int padh, int range)
+  {
+    int left   = MAX(mb_x * MACROBLOCK_SIZE - range, 0);
+    int top    = MAX(mb_y * MACROBLOCK_SIZE - range, 0);
+    int right  = MIN(mb_x * MACROBLOCK_SIZE + range, padw - MACROBLOCK_SIZE);
+    int bottom = MIN(mb_y * MACROBLOCK_SIZE + range, padh - MACROBLOCK_SIZE);
 
-   if (mb_x >= c_mb_cols[comp] || mb_y >= c_mb_rows[comp]) return;
+    int mx = mb_x * MACROBLOCK_SIZE;
+    int my = mb_y * MACROBLOCK_SIZE;
 
-   int padw = c_padw[comp];
-   int padh = c_padh[comp];
-   int range = c_me_search_range;
+    __shared__ int s_best_sad;
+    __shared__ int s_best_mv_x;
+    __shared__ int s_best_mv_y;
 
-   int mx = mb_x * 8;
-   int my = mb_y * 8;
+    if (threadIdx.x == 0 && threadIdx.y == 0)
+    {
+      s_best_sad = INT_MAX;
+      s_best_mv_x = 0;
+      s_best_mv_y = 0;
+    }
+    __syncthreads();
 
-   macroblock *mb = &mbs[mb_y * c_mb_cols[comp] + mb_x];
+    int local_best_sad = INT_MAX;
+    int local_best_x = 0;
+    int local_best_y = 0;
 
-   int best_sad = INT_MAX;
-   int best_dx = 0;
-   int best_dy = 0;
+    for (int y = top + threadIdx.y; y < bottom; y += blockDim.y)
+    {
+      for (int x = left + threadIdx.x; x < right; x += blockDim.x)
+      {
+        int sad = sad_block_8x8(orig + my * padw + mx, ref + y * padw + x, padw);
+        if (sad < local_best_sad)
+        {
+          local_best_sad = sad;
+          local_best_x = x - mx;
+          local_best_y = y - my;
+        }
+      }
+    }
 
-   for (int dy = -range; dy <= range; ++dy)
-   {
-     for (int dx = -range; dx <= range; ++dx)
-     {
-       int ref_x = mx + dx;
-       int ref_y = my + dy;
+    // Safe atomicMin — the thread that finds the min SAD will match below
+    int old_sad = atomicMin(&s_best_sad, local_best_sad);
 
-       if (ref_x < 0 || ref_y < 0 || ref_x + MACROBLOCK_SIZE > padw || ref_y + MACROBLOCK_SIZE > padh)
-       {
-         continue;
-       }
+    __syncthreads();
 
-       uint8_t *blk_orig = &orig[my * padw + mx];
-       uint8_t *blk_ref = &ref[ref_y * padw + ref_x];
-       int sad = sad_block_8x8(blk_orig, blk_ref, padw);
+    // Only one thread writes mv_x/mv_y
+    if (local_best_sad == s_best_sad)
+    {
+      s_best_mv_x = local_best_x;
+      s_best_mv_y = local_best_y;
+    }
 
-       if (sad < best_sad)
-       {
-         best_sad = sad;
-         best_dx = dx;
-         best_dy = dy;
-       }
-     }
-   }
+    __syncthreads();
 
-   if (thread_id == 0)
-   {
-     mb->mv_x = best_dx;
-     mb->mv_y = best_dy;
-     mb->use_mv = 1;
-   }
- }
+    if (threadIdx.x == 0 && threadIdx.y == 0)
+    {
+      mb->mv_x = s_best_mv_x;
+      mb->mv_y = s_best_mv_y;
+      mb->use_mv = 1;
+    }
+  }
+
+
+  // Top-level kernel
+  __global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons,
+                                             macroblock *d_mbs, int comp)
+  {
+    int mb_x = blockIdx.x;
+    int mb_y = blockIdx.y;
+
+    if (mb_x >= c_mb_cols[comp] || mb_y >= c_mb_rows[comp])
+      return;
+
+    macroblock *mb = &d_mbs[mb_y * c_mb_cols[comp] + mb_x];
+
+    me_block_8x8(mb, mb_x, mb_y, d_orig, d_recons,
+                 c_padw[comp], c_padh[comp], c_me_search_range);
+  }
+
+
 
 
  /**
