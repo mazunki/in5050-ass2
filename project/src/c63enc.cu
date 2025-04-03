@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <complex.h>
 #include <errno.h>
 #include <getopt.h>
 #include <limits.h>
@@ -38,45 +39,25 @@ void cleanup_cm(void) {
   }
 }
 
-
-/* Read planar YUV frames with 4:2:0 chroma sub-sampling */
-static yuv_t* read_yuv(FILE *file, struct c63_common *cm, int fb_index)
+static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 {
   size_t len = 0;
 
-  yuv_t *image = cm->frame_buffer[fb_index];
-
+  yuv_t *image = cm->nextframe->orig;
   uint8_t *Y = image->Y;
   uint8_t *U = image->U;
   uint8_t *V = image->V;
 
-  /* Read Y. The size of Y is the same as the size of the image. The indices
-     represents the color component (0 is Y, 1 is U, and 2 is V) */
   len += fread(Y, 1, cm->width*cm->height, file);
-
-  /* Read U. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y
-     because (height/2)*(width/2) = (height*width)/4. */
   len += fread(U, 1, (cm->width*cm->height)/4, file);
-
-  /* Read V. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y. */
   len += fread(V, 1, (cm->width*cm->height)/4, file);
 
-  if (ferror(file))
-  {
+  if (ferror(file)) {
     perror("ferror");
     exit(EXIT_FAILURE);
-  }
-
-  else if (len != cm->width*cm->height*1.5)
-  {
+  } else if (len != cm->width*cm->height*1.5) {
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", cm->height, cm->width);
-
-    free(image->Y);
-    free(image->U);
-    free(image->V);
-    free(image);
-
     return NULL;
   }
 
@@ -89,86 +70,32 @@ static void c63_encode_image(struct c63_common *cm)
 
   c63_pipeline *pipe = cm->pipe;
 
-  cm->curframe = prepare_next_frame(cm);
+  prepare_next_frame(cm);
 
-
-  if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
-  {
+  if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval) {
     cm->curframe->keyframe = 1;
     cm->frames_since_keyframe = 0;
-  }
-  else {
+  } else {
     cm->curframe->keyframe = 0;
   }
 
-  if (!cm->curframe->keyframe)
-  {
-    /** Motion Estimation
-     *   @param[in]  d_orig
-     *   @param[in]  d_ref
-     *   @param[out] d_mbs
-     */
+  if (!cm->curframe->keyframe) {
     startTrace2("stream image");
     CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
+    pthread_mutex_lock(&cm->pth_mutex_write_frame);
+    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
     endTrace();
+
     c63_motion_estimate(cm);
 
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_macroblocks_Y, pipe->event_estimate_Y));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[Y_COMPONENT], pipe->d_mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_Y));
-
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_macroblocks_U, pipe->event_estimate_U));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[U_COMPONENT], pipe->d_mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_U));
-
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_macroblocks_V, pipe->event_estimate_V));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->mbs[V_COMPONENT], pipe->d_mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost, pipe->stream_macroblocks_V));
-
-    /** Motion Compensation (gpu function)
-     *   @param[in]  d_mbs
-     *   @param[out] d_predicted
-     *   @param[in]  d_ref
-     */
     c63_motion_compensate(cm);
-
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_predictions_Y, pipe->event_compensate_Y));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->Y, pipe->d_predicted_Y, cm->luma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_Y));
-
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_predictions_U, pipe->event_compensate_U));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->U, pipe->d_predicted_U, cm->chroma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_U));
-
-    CUDA_ASSERT(cudaStreamWaitEvent(pipe->stream_predictions_V, pipe->event_compensate_V));
-    CUDA_ASSERT(cudaMemcpyAsync(cm->curframe->predicted->V, pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost, pipe->stream_predictions_V));
   }
 
-  // we no longer need orig, ready it already
-  yuv_t *next_frame = cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE];
-  if (next_frame != NULL) {
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_orig_Y, next_frame->Y, cm->luma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_orig_U, next_frame->U, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-    CUDA_ASSERT(cudaMemcpyAsync(pipe->d_orig_V, next_frame->V, cm->chroma_size, cudaMemcpyHostToDevice, pipe->stream_image));
-  }
-
-  /** quantize (slow CPU-only function)
-   *   @param[in]  orig
-   *   @param[in]  predicted
-   *   @param[out] residuals
-   */
-   /** dequantize (slow CPU-only function)
-    *   @param[in]  residuals
-    *   @param[in]  predicted
-    *   @param[out] recons
-    */
   startTrace2("quantize+dequantize");
-
   pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
   pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
-
   endTrace();
 
-  /** save buffer (slow write-to-disk function)
-   *   @param[in]  cm->curframe->residuals->{Y,U,V}dct
-   *   @param[in]  mb->curframe->mbs
-   *   @param[out] cm->e_ctx.fp (write to disk)
-   */
   startTrace2("Writing to Disk");
 
   pthread_mutex_lock(&cm->pth_mutex_write_frame);
@@ -180,7 +107,6 @@ static void c63_encode_image(struct c63_common *cm)
 
   ++cm->framenum;
   ++cm->frames_since_keyframe;
-
   endTrace();
 }
 
@@ -188,7 +114,6 @@ struct c63_common* init_c63_enc(int width, int height)
 {
   int i;
 
-  /* calloc() sets allocated memory to zero */
   c63_common *cm = (c63_common*)calloc(1, sizeof(struct c63_common));
 
   cm->width = width;
@@ -206,14 +131,10 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->mb_cols_chroma = cm->upw / MACROBLOCK_SIZE;
   cm->mb_rows_chroma = cm->uph / MACROBLOCK_SIZE;
 
-  /* Quality parameters -- Home exam deliveries should have original values,
-   i.e., quantization factor should be 25, search range should be 16, and the
-   keyframe interval should be 100. */
-  cm->qp = 25;                  // Constant quantization factor. Range: [1..50]
-  cm->me_search_range = 16;     // Pixels in every direction
-  cm->keyframe_interval = 100;  // Distance between keyframes
+  cm->qp = 25;
+  cm->me_search_range = 16;
+  cm->keyframe_interval = 100;
 
-  /* Initialize quantization tables */
   for (i = 0; i < 64; ++i)
   {
     cm->quanttbl[Y_COMPONENT][i] = yquanttbl_def[i] / (cm->qp / 10.0);
@@ -228,20 +149,15 @@ struct c63_common* init_c63_enc(int width, int height)
 
   cm->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
 
-  for (int i=0; i < FRAMEBUFFER_SIZE; i++) {
-    cm->frame_buffer[i] = (yuv_t *)malloc(sizeof(yuv_t));
-    CUDA_ASSERT(cudaHostAlloc(&cm->frame_buffer[i]->Y, cm->luma_size, cudaHostAllocDefault));
-    CUDA_ASSERT(cudaHostAlloc(&cm->frame_buffer[i]->U, cm->chroma_size, cudaHostAllocDefault));
-    CUDA_ASSERT(cudaHostAlloc(&cm->frame_buffer[i]->V, cm->chroma_size, cudaHostAllocDefault));
-  }
-  cm->fb_curr_index = 0;
+  cm->curframe = create_frame(cm, FRAME_CUR);
+  cm->nextframe = create_frame(cm, FRAME_NEXT);
+  cm->refframe = NULL;
 
   c63_initialize_constant_values(cm);
   initialize_dctlookup_values();
 
   cm->pthreads_run = 1;
 
-  // +1 for main thread
   pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS + 1);
   pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS + 1);
 
@@ -262,6 +178,7 @@ void free_c63_enc(struct c63_common* cm)
 {
   c63_pipeline_free(cm->pipe);
   destroy_frame(cm->curframe);
+  destroy_frame(cm->nextframe);
   free(cm);
 }
 
@@ -313,9 +230,7 @@ int main(int argc, char **argv)
   }
 
   outfile = fopen(output_file, "wb");
-
-  if (outfile == NULL)
-  {
+  if (outfile == NULL) {
     perror("fopen");
     exit(EXIT_FAILURE);
   }
@@ -324,50 +239,42 @@ int main(int argc, char **argv)
   cm->e_ctx.fp = outfile;
 
   input_file = argv[optind];
-
-  if (limit_numframes) { fprintf(stderr, "Limited to %d frames.\n", limit_numframes); }
+  if (limit_numframes) {
+    fprintf(stderr, "Limited to %d frames.\n", limit_numframes);
+  }
 
   FILE *infile = fopen(input_file, "rb");
-
-  if (infile == NULL)
-  {
+  if (infile == NULL) {
     perror("fopen");
     exit(EXIT_FAILURE);
   }
 
-  /* Encode input frames */
   int numframes = 0;
-  if (read_yuv(infile, cm, cm->fb_curr_index) == NULL) {
+  if (read_yuv(infile, cm) == NULL) {
     exit(EXIT_FAILURE);
   }
 
-  do {
-    int fb_next = (cm->fb_curr_index+1) % FRAMEBUFFER_SIZE;
-
+  int done = 0;
+  while (!done) {
     if (fpeek(infile) == EOF) {
-      CUDA_ASSERT(cudaFreeHost(cm->frame_buffer[fb_next]->Y));
-      CUDA_ASSERT(cudaFreeHost(cm->frame_buffer[fb_next]->U));
-      CUDA_ASSERT(cudaFreeHost(cm->frame_buffer[fb_next]->V));
-      cm->frame_buffer[fb_next] = NULL;
-
-    } else {
-      if (read_yuv(infile, cm, fb_next) == NULL) {
-        exit(EXIT_FAILURE);
-      }
+      done = 1;
+    } else if (read_yuv(infile, cm) == NULL) {
+      exit(EXIT_FAILURE);
     }
 
     printf("Encoding frame %d...", numframes+1);
     c63_encode_image(cm);
-
     printf(" done!\n");
 
-    cm->fb_curr_index = fb_next;
     ++numframes;
 
     if (limit_numframes && numframes >= limit_numframes) {
       break;
     }
-  } while (cm->frame_buffer[cm->fb_curr_index] != NULL);
+  }
+
+  destroy_frame(cm->nextframe);
+  cm->nextframe = NULL;
 
   cm->unwritten_frame = cm->curframe;
   cm->curframe = NULL;
@@ -375,7 +282,6 @@ int main(int argc, char **argv)
 
   cm->pthreads_run = 0;
 
-  // trigger final round for clean exit
   pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
   pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
 
@@ -388,6 +294,8 @@ int main(int argc, char **argv)
 
   pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
   pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
+  destroy_frame(cm->curframe);
+  cm->curframe = NULL;
 
   printf("Completed encoding! Encoded %d frames\n", numframes);
 

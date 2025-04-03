@@ -90,23 +90,22 @@ struct frame
 };
 
 struct c63_pipeline {
-  uint8_t *d_orig_Y, *d_orig_U, *d_orig_V;
-  uint8_t *d_recons_Y, *d_recons_U, *d_recons_V;
-  uint8_t *d_refframe_Y, *d_refframe_U, *d_refframe_V;
-  uint8_t *d_predicted_Y, *d_predicted_U, *d_predicted_V;
-  struct macroblock *d_mbs[COLOR_COMPONENTS];
+  uint8_t *shm_orig_Y, *shm_orig_U, *shm_orig_V;
+  uint8_t *shm_recons_Y, *shm_recons_U, *shm_recons_V;
+  uint8_t *shm_refframe_Y, *shm_refframe_U, *shm_refframe_V;
+  uint8_t *shm_predicted_Y, *shm_predicted_U, *shm_predicted_V;
+  struct macroblock *shm_mbs_Y, *shm_mbs_U, *shm_mbs_V;
+  int16_t *residuals_Y, *residuals_U, *residuals_V;
 
-  yuv_t *h_refframe, *h_recons;  // note that these pointers are swapped each frame
-  yuv_t *h_predicted;
-  dct_t *h_residuals, *unwritten_residuals;
-  struct macroblock *h_mbs[COLOR_COMPONENTS], *unwritten_mbs[COLOR_COMPONENTS];
+  // preemptively reading
+  uint8_t *shm_next_Y, *shm_next_U, *shm_next_V;
+  // writing in the background
+  struct macroblock *shm_prev_mbs_Y, *shm_prev_mbs_U, *shm_prev_mbs_V;
+  int16_t *prev_residuals_Y, *prev_residuals_U, *prev_residuals_V;
 
 #ifdef __CUDACC__ // CUDA contexts
   cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
   cudaStream_t stream_compensate_Y, stream_compensate_U, stream_compensate_V;
-
-  cudaStream_t stream_macroblocks_Y, stream_macroblocks_U, stream_macroblocks_V;
-  cudaStream_t stream_predictions_Y, stream_predictions_U, stream_predictions_V;
   cudaStream_t stream_image;
 
   cudaEvent_t event_estimate_Y, event_estimate_U, event_estimate_V;
@@ -134,6 +133,7 @@ struct c63_common
 
   struct frame *refframe;
   struct frame *curframe;
+  struct frame *nextframe;
 
   int framenum;
 
@@ -142,8 +142,6 @@ struct c63_common
 
   struct entropy_ctx e_ctx;
   struct c63_pipeline *pipe;
-  yuv_t *frame_buffer[FRAMEBUFFER_SIZE];
-  int fb_curr_index;
 
   int pthreads_run;
 

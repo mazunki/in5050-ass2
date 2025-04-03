@@ -11,30 +11,30 @@
  *   @param[out] residuals
  */
 void dct_quantize_Y(struct c63_common *cm) {
-  startTrace5("stream pred");
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_Y));
+  startTrace5("wait pred");
+  CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_Y));
   endTrace();
 
   startTrace5("dct Y");
-  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct);
+  dct_quantize(cm->pipe->shm_orig_Y, cm->pipe->shm_predicted_Y, cm->pipe->residuals_Y);
   endTrace();
 }
 void dct_quantize_U(struct c63_common *cm) {
-  startTrace5("stream pred");
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_U));
+  startTrace5("wait pred");
+  CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_U));
   endTrace();
 
   startTrace5("dct U");
-  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct);
+  dct_quantize(cm->pipe->shm_orig_U, cm->pipe->shm_predicted_U, cm->pipe->residuals_U);
   endTrace();
 }
 void dct_quantize_V(struct c63_common *cm) {
-  startTrace5("stream pred");
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_predictions_V));
+  startTrace5("wait pred");
+  CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_V));
   endTrace();
 
   startTrace5("dct V");
-  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct);
+  dct_quantize(cm->pipe->shm_orig_V, cm->pipe->shm_predicted_V, cm->pipe->residuals_V);
   endTrace();
 }
 
@@ -45,30 +45,18 @@ void dct_quantize_V(struct c63_common *cm) {
  */
 void dequantize_idct_Y(struct c63_common *cm) {
   startTrace5("idct Y");
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y);
+  dequantize_idct(cm->pipe->residuals_Y, cm->pipe->shm_predicted_Y, cm->pipe->shm_recons_Y);
   endTrace();
-
-  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
-    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_Y, cm->pipe->h_recons->Y, cm->luma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
-  }
 }
 void dequantize_idct_U(struct c63_common *cm) {
   startTrace5("idct U");
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U);
+  dequantize_idct(cm->pipe->residuals_U, cm->pipe->shm_predicted_U, cm->pipe->shm_recons_U);
   endTrace();
-
-  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
-    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_U, cm->pipe->h_recons->U, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
-  }
 }
 void dequantize_idct_V(struct c63_common *cm) {
   startTrace5("idct V");
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V);
+  dequantize_idct(cm->pipe->residuals_U, cm->pipe->shm_predicted_V, cm->pipe->shm_recons_V);
   endTrace();
-
-  if (cm->frame_buffer[(cm->fb_curr_index+1) % FRAMEBUFFER_SIZE] != NULL) {
-    CUDA_ASSERT(cudaMemcpyAsync(cm->pipe->d_recons_V, cm->pipe->h_recons->V, cm->chroma_size, cudaMemcpyHostToDevice, cm->pipe->stream_image));
-  }
 }
 
 // pthread wrappers

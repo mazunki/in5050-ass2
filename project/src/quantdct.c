@@ -11,60 +11,20 @@
 #include <arm_neon.h>
 #include <threads.h>
 
-#include "c63.h"
 #include "common.h"
 #include "tables.h"
 
 #include "profiling.h"
 
-#define DCT_SCALE_BITS 8
 #define ISQRT2 0.70710678118654f
 
-typedef int16_t quant16_t;
-typedef int32_t quant32_t;
-typedef int64_t quant64_t;
+static float32x4_t precalcIdct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][2];
+static float32x4_t precalcDct[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][2];
 
-static quant16_t precalcIdct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
-static quant16_t precalcDct_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE][MACROBLOCK_SIZE];
-static quant16_t ISQRT2_Q16;
-
-thread_local static quant16_t QUANT_TBL_q16[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
-thread_local static quant16_t DEQUANT_TBL_q16[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static float32_t QUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
+thread_local static float32_t DEQUANT_TBL[MACROBLOCK_SIZE*MACROBLOCK_SIZE];
 thread_local static uint32_t HEIGHT, WIDTH;
 
-void initialize_dctlookup_values() {
-  quant16_t dctlookup_q16[MACROBLOCK_SIZE][MACROBLOCK_SIZE];
-  ISQRT2_Q16 = (quant16_t)(ISQRT2 * (1 << DCT_SCALE_BITS) + 0.5f);
-
-  for (uint8_t u = 0; u < MACROBLOCK_SIZE; u++) {
-    for (uint8_t v = 0; v < MACROBLOCK_SIZE; v++) {
-      dctlookup_q16[u][v] = (quant16_t)roundf(dctlookup[u][v] * (1 << DCT_SCALE_BITS));
-    }
-  }
-
-  for (uint8_t y = 0; y < MACROBLOCK_SIZE; y++) {
-    for (uint8_t v = 0; v < MACROBLOCK_SIZE; v++) {
-      for (uint8_t u = 0; u < MACROBLOCK_SIZE; u++) {
-        for (uint8_t x = 0; x < MACROBLOCK_SIZE; x++) {
-          quant16_t cxu = dctlookup_q16[x][u];
-          quant16_t cyv = dctlookup_q16[y][v];
-
-          // q16 * q16 = q32 → shift down to q16
-          quant16_t dct_coeff_q16 = ((quant32_t)cxu * cyv) >> DCT_SCALE_BITS;
-          precalcDct_q16[y][v][u][x] = dct_coeff_q16;
-
-          quant16_t cux = dctlookup_q16[u][x];
-          quant16_t cvy = dctlookup_q16[v][y];
-
-          // q16 * q16 = q32 → shift down to q16
-          quant16_t idct_coeff_q16 = ((quant32_t)cux * cvy) >> DCT_SCALE_BITS;
-          precalcIdct_q16[y][v][u][x] = idct_coeff_q16;
-        }
-      }
-    }
-  }
-
-}
 
 void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t padh)
 {
@@ -73,176 +33,194 @@ void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t 
 
   for (uint8_t i = 0; i < MACROBLOCK_SIZE*MACROBLOCK_SIZE; i++) {
     // out[zigzag] = (float)round((dct / 4.0) / QUANT_TBL[zigzag]);
-    float32_t quant =  1.0f / (4.0f * tbl[i]);
-    QUANT_TBL_q16[i] = (quant16_t)roundf(quant * (1 << DCT_SCALE_BITS));
+    QUANT_TBL[i] =  1.0f / (4.0f * tbl[i]);
 
     // out[v * 8 + u] = (float)round((dct * QUANT_TBL[zigzag]) / 4.0);
-    float32_t dequant = tbl[i] / 4.0f;
-    DEQUANT_TBL_q16[i] = (quant16_t)roundf(dequant * (1 << DCT_SCALE_BITS));
+    DEQUANT_TBL[i] = tbl[i] / 4.0f;
   }
 }
 
-static void dct_2d(const quant32_t *in, quant32_t *out)
+void initialize_dctlookup_values() {
+  for (int v = 0; v < MACROBLOCK_SIZE; v++) {
+    for (int u = 0; u < MACROBLOCK_SIZE; u++) {
+      for (int y = 0; y < MACROBLOCK_SIZE; y++) {
+        // idct
+        float32x4_t idct_y_vec = vdupq_n_f32(dctlookup[v][y]);
+        precalcIdct[y][u][v][0] = vmulq_f32(*((float32x4_t *) dctlookup[u]), idct_y_vec);
+        precalcIdct[y][u][v][1] = vmulq_f32(*((float32x4_t *) &dctlookup[u][4]), idct_y_vec);
+
+        // dct (notice the transpose)
+        float32x4_t dct_y_vec = vdupq_n_f32(dctlookup[y][v]);
+        float32x4_t dct_x_vec1 = {dctlookup[0][u], dctlookup[1][u], dctlookup[2][u], dctlookup[3][u]};
+        float32x4_t dct_x_vec2 = {dctlookup[4][u], dctlookup[5][u], dctlookup[6][u], dctlookup[7][u]};
+
+        precalcDct[y][u][v][0] = vmulq_f32(dct_x_vec1, dct_y_vec);
+        precalcDct[y][u][v][1] = vmulq_f32(dct_x_vec2, dct_y_vec);
+      }
+    }
+  }
+}
+
+static void dct_2d(const float *in, float *out)
 {
   startTrace8("dct 2d");
-  for (uint8_t v = 0; v < MACROBLOCK_SIZE; v++) {
-    for (uint8_t u = 0; u < MACROBLOCK_SIZE; u++) {
-      quant64_t dct_q64 = 0;
+  memset(out, 0, MACROBLOCK_SIZE*MACROBLOCK_SIZE*sizeof(float));
 
-      for (uint8_t y = 0; y < MACROBLOCK_SIZE; y++) {
-        for (uint8_t x = 0; x < MACROBLOCK_SIZE; x++) {
-          quant32_t pixel_q32 = in[y*MACROBLOCK_SIZE + x];
-          quant16_t coeff_q16 = precalcDct_q16[y][v][u][x];
+  for (int y = 0; y < MACROBLOCK_SIZE; y++) {
+    float32x4_t in_vec1 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE]);
+    float32x4_t in_vec2 = vld1q_f32((const float32_t *)&in[y * MACROBLOCK_SIZE + 4]);
 
-          // q32 * q16 = q48, accumulate in q64
-          dct_q64 += (quant64_t)pixel_q32 * coeff_q16;
-        }
+    for (int v = 0; v < MACROBLOCK_SIZE; v++) {
+      for (int u = 0; u < MACROBLOCK_SIZE; u++) {
+        float32x4_t dct = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+        dct = vmlaq_f32(dct, in_vec1, precalcDct[y][u][v][0]);
+        dct = vmlaq_f32(dct, in_vec2, precalcDct[y][u][v][1]);
+
+        out[v * MACROBLOCK_SIZE + u] += vaddvq_f32(dct);
       }
-      out[v * MACROBLOCK_SIZE + u] = MIN(dct_q64, INT32_MAX);
     }
   }
   endTrace();
 }
 
-static void idct_2d(const quant32_t *in, quant32_t *out)
+
+static void idct_2d(const float *in, float *out)
 {
   startTrace8("idct 2d");
-  for (uint8_t v = 0; v < MACROBLOCK_SIZE; v++) {
-    for (uint8_t u = 0; u < MACROBLOCK_SIZE; u++) {
-      quant64_t idct_q64 = 0;
 
-      for (uint8_t y = 0; y < MACROBLOCK_SIZE; y++) {
-        for (uint8_t x = 0; x < MACROBLOCK_SIZE; x++) {
-          quant32_t pixel_q32 = in[y*MACROBLOCK_SIZE + x];
-          quant16_t coeff_q16 = precalcIdct_q16[y][v][u][x];
+  for (int v = 0; v < MACROBLOCK_SIZE; v++) {
+    for (int u = 0; u < MACROBLOCK_SIZE; u++) {
+      float dct = 0.0f;
 
-          // q32 * q16 = q48, accumulate in q64
-          idct_q64 += (quant64_t)pixel_q32 * coeff_q16;
-        }
+      for (int y = 0; y < MACROBLOCK_SIZE; y++) {
+
+        float32x4_t in_vec1 = vld1q_f32(&in[y * MACROBLOCK_SIZE]);
+        float32x4_t in_vec2 = vld1q_f32(&in[y * MACROBLOCK_SIZE + 4]);
+
+        float32x4_t mul_sum1 = vmulq_f32(in_vec1, precalcIdct[y][u][v][0]);
+        float32x4_t mul_sum2 = vmulq_f32(in_vec2, precalcIdct[y][u][v][1]);
+
+        float32x4_t mul_sum = vaddq_f32(mul_sum1, mul_sum2);
+        dct += vaddvq_f32(mul_sum);
       }
-      out[v * MACROBLOCK_SIZE + u] = MIN(idct_q64, INT32_MAX);
+
+      out[v * MACROBLOCK_SIZE + u] = dct;
     }
   }
   endTrace();
 }
 
-static void scale_block(const quant32_t *in, quant32_t *out)
+static void scale_block(float *in_data, float *out_data)
 {
   startTrace8("scaleblk");
-  for (uint8_t v = 0; v < MACROBLOCK_SIZE; ++v) {
-    for (uint8_t u = 0; u < MACROBLOCK_SIZE; ++u) {
-      quant32_t pixel_q32 = in[v * MACROBLOCK_SIZE + u];
+  int u, v;
 
-      quant16_t a1_q16 = u ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
-      quant16_t a2_q16 = v ? (1 << DCT_SCALE_BITS) : ISQRT2_Q16;
-      quant32_t scale_q32 = ((quant32_t)a1_q16 * a2_q16) >> DCT_SCALE_BITS;
+  for (v = 0; v < MACROBLOCK_SIZE; ++v) {
+    for (u = 0; u < MACROBLOCK_SIZE; ++u) {
+      float a1 = !u ? ISQRT2 : 1.0f;
+      float a2 = !v ? ISQRT2 : 1.0f;
 
-      // q32 * q32 = q64 → q64, scale down to q32
-      quant32_t scaled_q32 = ((quant64_t)pixel_q32 * scale_q32) >> DCT_SCALE_BITS;
-
-      out[v * MACROBLOCK_SIZE + u] = scaled_q32;
+      /* Scale according to normalizing function */
+      out_data[v * MACROBLOCK_SIZE + u] = in_data[v * MACROBLOCK_SIZE + u] * a1 * a2;
     }
   }
   endTrace();
 }
 
-static void quantize_block(const quant32_t *in, quant32_t *out)
+static void quantize_block(float *in_data, float *out_data)
 {
   startTrace8("quant blk");
-  for (uint8_t zigzag = 0; zigzag < MACROBLOCK_SIZE * MACROBLOCK_SIZE; ++zigzag) {
+  int zigzag;
+
+  for (zigzag = 0; zigzag < 64; ++zigzag) {
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
+
+    float dct = in_data[v * 8 + u];
 
     /* Zig-zag and quantize */
-    quant32_t dct_q32 = in[v * 8 + u];
-
-    quant32_t quantized_q32 = ((quant64_t)dct_q32 * QUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
-
-    out[zigzag] = quantized_q32;
+    out_data[zigzag] = dct * QUANT_TBL[zigzag];
   }
   endTrace();
 }
 
-static void dequantize_block(const quant32_t *in, quant32_t *out)
+static void dequantize_block(float *in_data, float *out_data)
 {
   startTrace8("deq blk");
-  for (uint8_t zigzag = 0; zigzag < MACROBLOCK_SIZE * MACROBLOCK_SIZE; ++zigzag) {
+  int zigzag;
+
+  for (zigzag = 0; zigzag < 64; ++zigzag) {
     uint8_t u = zigzag_U[zigzag];
     uint8_t v = zigzag_V[zigzag];
 
+    float dct = in_data[zigzag];
+
     /* Zig-zag and de-quantize */
-    quant32_t dct_q32 = in[zigzag];
-
-    quant32_t dequantized_q32 = ((quant32_t)dct_q32 * DEQUANT_TBL_q16[zigzag]) >> DCT_SCALE_BITS;
-
-    out[v * 8 + u] = dequantized_q32;
+    out_data[v * 8 + u] = dct * DEQUANT_TBL[zigzag];
   }
   endTrace();
 }
 
-static void dct_quant_block_8x8(const int16_t *in, int16_t *out)
+static void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data)
 {
   startTrace7("quant 8x8");
 
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
-  quant32_t mb_q32[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
-  quant32_t mb2_q32[MACROBLOCK_SIZE * MACROBLOCK_SIZE] = {0};
 
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb[i] = in[i];
-    mb_q32[i] = (quant32_t)roundf(in[i] * (1 << DCT_SCALE_BITS));
+  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
+    mb[i] = in_data[i];
   }
 
-  dct_2d(mb_q32, mb2_q32);
-  scale_block(mb2_q32, mb_q32);
-  quantize_block(mb_q32, mb2_q32);
+  dct_2d(mb, mb2);
+  scale_block(mb2, mb);
+  quantize_block(mb, mb2);
 
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb2[i] = (float32_t)mb2_q32[i] / (float)(1 << (2 * DCT_SCALE_BITS));
-    out[i] = mb2[i];
+  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
+    out_data[i] = mb2[i];
   }
 
   endTrace();
 }
 
-static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
+static void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data)
 {
   startTrace7("deq 8x8");
 
   float mb[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
   float mb2[MACROBLOCK_SIZE * MACROBLOCK_SIZE] __attribute((aligned(16)));
-  quant32_t mb_q32[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
-  quant32_t mb2_q32[MACROBLOCK_SIZE * MACROBLOCK_SIZE] = {0};
 
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb[i] = in[i];
-    mb_q32[i] = (quant32_t)roundf(mb[i] * (1 << DCT_SCALE_BITS));
+  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
+    mb[i] = in_data[i];
   }
 
-  dequantize_block(mb_q32, mb2_q32);
-  scale_block(mb2_q32, mb_q32);
-  idct_2d(mb_q32, mb2_q32);
+  dequantize_block(mb, mb2);
+  scale_block(mb2, mb);
+  idct_2d(mb, mb2);
 
-  for (uint8_t i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
-    mb2[i] = (float32_t)mb2_q32[i] / (float)(1 << (2 * DCT_SCALE_BITS));
-    out[i] = mb2[i];
+  for (int i = 0; i < MACROBLOCK_SIZE * MACROBLOCK_SIZE; i++) {
+    out_data[i] = mb2[i];
   }
 
   endTrace();
 }
 
-static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, uint8_t *out)
+static void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int y, uint8_t *out_data)
 {
   startTrace6("deq row");
+  uint32_t x;
+
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
 
   /* Perform the dequantization and iDCT */
-  for (uint x = 0; x < WIDTH; x += MACROBLOCK_SIZE) {
-    dequant_idct_block_8x8(in + (x * MACROBLOCK_SIZE), block);
+  for (x = 0; x < WIDTH; x += MACROBLOCK_SIZE) {
+    int i, j;
 
-    for (uint8_t i = 0; i < MACROBLOCK_SIZE; ++i) {
-      for (uint8_t j = 0; j < MACROBLOCK_SIZE; ++j) {
+    dequant_idct_block_8x8(in_data + (x * MACROBLOCK_SIZE), block);
+
+    for (i = 0; i < MACROBLOCK_SIZE; ++i) {
+      for (j = 0; j < MACROBLOCK_SIZE; ++j) {
         /* Add prediction block. Note: DCT is not precise -
            Clamp to legal values */
         int16_t tmp = block[i * MACROBLOCK_SIZE + j] + (int16_t)prediction[i * WIDTH + j + x];
@@ -253,45 +231,52 @@ static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, ui
           tmp = 255;
         }
 
-        out[i * WIDTH + j + x] = tmp;
+        out_data[i * WIDTH + j + x] = tmp;
       }
     }
   }
   endTrace();
 }
 
-static void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int16_t *out)
+static void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int16_t *out_data)
 {
   startTrace6("quant row");
+  uint32_t x;
+
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
 
   /* Perform the DCT and quantization */
-  for (uint x = 0; x < WIDTH; x += MACROBLOCK_SIZE) {
-    for (uint8_t i = 0; i < MACROBLOCK_SIZE; ++i) {
-      for (uint8_t j = 0; j < MACROBLOCK_SIZE; ++j) {
-        block[i * MACROBLOCK_SIZE + j] = ((int16_t)in[i * WIDTH + j + x] - prediction[i * WIDTH + j + x]);
+  for (x = 0; x < WIDTH; x += MACROBLOCK_SIZE) {
+    int i, j;
+
+    for (i = 0; i < MACROBLOCK_SIZE; ++i) {
+      for (j = 0; j < MACROBLOCK_SIZE; ++j) {
+        block[i * MACROBLOCK_SIZE + j] = ((int16_t)in_data[i * WIDTH + j + x] - prediction[i * WIDTH + j + x]);
       }
     }
 
     /* Store MBs linear in memory, i.e. the 64 coefficients are stored
        continous. This allows us to ignore stride in DCT/iDCT and other
        functions. */
-    dct_quant_block_8x8(block, out + (x * MACROBLOCK_SIZE));
+    dct_quant_block_8x8(block, out_data + (x * MACROBLOCK_SIZE));
   }
   endTrace();
 }
 
-void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out)
+void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint8_t *out_data)
 {
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+  uint32_t y;
+
+  for (y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+    dequantize_idct_row(in_data + y * WIDTH, prediction + y * WIDTH,  y, out_data + y * WIDTH);
   }
 }
 
 
-void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out)
-{
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dct_quantize_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+void dct_quantize(uint8_t *in_data, uint8_t *prediction, int16_t *out_data) {
+  uint32_t y;
+
+  for (y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+    dct_quantize_row(in_data + y * WIDTH, prediction + y * WIDTH,  out_data + y * WIDTH);
   }
 }

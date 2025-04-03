@@ -324,10 +324,6 @@ static void write_interleaved_data(struct c63_common *cm, frame *f)
   uint32_t ublocks = (uint32_t) (ceil(cm->ypw/(float)(8.0f*YX)));
   uint32_t vblocks = (uint32_t) (ceil(cm->yph/(float)(8.0f*YY)));
 
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_macroblocks_Y));
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_macroblocks_U));
-  CUDA_ASSERT(cudaStreamSynchronize(cm->pipe->stream_macroblocks_V));
-
   /* Write the MCU's interleaved */
   for(v = 0; v < vblocks; ++v)
   {

@@ -343,14 +343,16 @@ void parse_sof0(struct c63_common *cm)
 
     cm->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
 
+    cm->curframe = create_frame(cm, FRAME_CUR);
+    cm->nextframe = create_frame(cm, FRAME_NEXT);
+    cm->refframe = NULL;
+
     c63_initialize_constant_values(cm);
     initialize_dctlookup_values();
   }
 
   /* Advance to next frame */
-  destroy_frame(cm->refframe);
-  cm->refframe = cm->curframe;
-  cm->curframe = create_frame(cm, 0);
+  prepare_next_frame(cm);
 
   /* Is this a keyframe */
   cm->curframe->keyframe = get_byte(cm->e_ctx.fp);
@@ -429,14 +431,6 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
 {
   startTrace2("Decode image");
   if (!cm->curframe->keyframe) {
-
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[Y_COMPONENT], cm->pipe->d_mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[U_COMPONENT], cm->pipe->d_mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->mbs[V_COMPONENT], cm->pipe->d_mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyDeviceToHost));
-
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_Y, cm->refframe->recons->Y, cm->luma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_U, cm->refframe->recons->U, cm->chroma_size, cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_refframe_V, cm->refframe->recons->V, cm->chroma_size, cudaMemcpyHostToDevice));
     CUDA_ASSERT(cudaDeviceSynchronize());
 
     /** Motion Compensation (cuda function)
@@ -449,10 +443,6 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
     c63_motion_compensate(cm);
     endTrace();
     CUDA_ASSERT(cudaDeviceSynchronize());
-
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->Y, cm->pipe->d_predicted_Y, cm->luma_size, cudaMemcpyDeviceToHost));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->U, cm->pipe->d_predicted_U, cm->chroma_size, cudaMemcpyDeviceToHost));
-    CUDA_ASSERT(cudaMemcpy(cm->curframe->predicted->V, cm->pipe->d_predicted_V, cm->chroma_size, cudaMemcpyDeviceToHost));
   }
 
 
@@ -528,7 +518,7 @@ int main(int argc, char **argv)
   {
     startTrace1("Decode frame");
     // DEBUG("Decoding frame %d", framenum);
-    cm->curframe = prepare_next_frame(cm);
+    prepare_next_frame(cm);
 
     /**
      * @param[in]  fin
@@ -537,12 +527,6 @@ int main(int argc, char **argv)
      */
     startTrace2("Parse frame");
     parse_c63_frame(cm);
-    endTrace();
-
-    startTrace2("Copy frame");
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[Y_COMPONENT], cm->curframe->mbs[Y_COMPONENT], cm->num_mbs_luma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[U_COMPONENT], cm->curframe->mbs[U_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
-    CUDA_ASSERT(cudaMemcpy(cm->pipe->d_mbs[V_COMPONENT], cm->curframe->mbs[V_COMPONENT], cm->num_mbs_chroma * sizeof(struct macroblock), cudaMemcpyHostToDevice));
     endTrace();
 
      /**
