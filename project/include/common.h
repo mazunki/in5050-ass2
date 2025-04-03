@@ -7,6 +7,7 @@
 
 #define MACROBLOCK_SIZE 8
 
+
 #define CUDA_ASSERT(call)                                                     \
     {                                                                         \
         cudaError_t err = call;                                               \
@@ -27,11 +28,12 @@
         }                                                                     \
     }
 
-
 #ifdef NDEBUG
 #define DEBUG(fmt, ...) fprintf(stderr, "[DEBUG] %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 #else
 #define DEBUG(fmt, ...)
+#define CUDA_CHECK(call)
+#define CUDA_CHECK()
 #endif
 
 #define SWAP_POINTERS(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)

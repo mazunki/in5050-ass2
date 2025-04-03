@@ -42,6 +42,10 @@ struct c63_pipeline* c63_pipeline_init(size_t frame_size, size_t chroma_size, si
   CUDA_ALLOC_SHARED(pipe->shm_predicted_U, chroma_size);
   CUDA_ALLOC_SHARED(pipe->shm_predicted_V, chroma_size);
 
+  CUDA_ALLOC_SHARED(pipe->shm_next_predicted_Y, frame_size);
+  CUDA_ALLOC_SHARED(pipe->shm_next_predicted_U, chroma_size);
+  CUDA_ALLOC_SHARED(pipe->shm_next_predicted_V, chroma_size);
+
   CUDA_ALLOC_SHARED(pipe->shm_mbs_Y, num_blocks_luma * sizeof(struct macroblock));
   CUDA_ALLOC_SHARED(pipe->shm_mbs_U, num_blocks_chroma * sizeof(struct macroblock));
   CUDA_ALLOC_SHARED(pipe->shm_mbs_V, num_blocks_chroma * sizeof(struct macroblock));
@@ -101,6 +105,10 @@ void c63_pipeline_free(struct c63_pipeline *pipe)
   cudaFreeHost(pipe->shm_predicted_U);
   cudaFreeHost(pipe->shm_predicted_V);
 
+  cudaFreeHost(pipe->shm_next_predicted_Y);
+  cudaFreeHost(pipe->shm_next_predicted_U);
+  cudaFreeHost(pipe->shm_next_predicted_V);
+
   free(pipe->residuals_Y);
   free(pipe->residuals_U);
   free(pipe->residuals_V);
@@ -136,6 +144,7 @@ void c63_pipeline_free(struct c63_pipeline *pipe)
   cudaStreamDestroy(pipe->stream_compensate_V);
 }
 
+
 struct frame* create_frame(struct c63_common *cm, int role)
 {
   struct frame *f = (struct frame *)calloc(1, sizeof(struct frame));
@@ -155,6 +164,10 @@ struct frame* create_frame(struct c63_common *cm, int role)
       f->residuals->Udct = cm->pipe->residuals_U;
       f->residuals->Vdct = cm->pipe->residuals_V;
 
+      f->predicted->Y = cm->pipe->shm_predicted_Y;
+      f->predicted->U = cm->pipe->shm_predicted_U;
+      f->predicted->V = cm->pipe->shm_predicted_V;
+
       f->mbs[Y_COMPONENT] = cm->pipe->shm_mbs_Y;
       f->mbs[U_COMPONENT] = cm->pipe->shm_mbs_U;
       f->mbs[V_COMPONENT] = cm->pipe->shm_mbs_V;
@@ -169,6 +182,10 @@ struct frame* create_frame(struct c63_common *cm, int role)
       f->residuals->Udct = cm->pipe->prev_residuals_U;
       f->residuals->Vdct = cm->pipe->prev_residuals_V;
 
+      f->predicted->Y = cm->pipe->shm_next_predicted_Y;
+      f->predicted->U = cm->pipe->shm_next_predicted_U;
+      f->predicted->V = cm->pipe->shm_next_predicted_V;
+
       f->mbs[Y_COMPONENT] = cm->pipe->shm_prev_mbs_Y;
       f->mbs[U_COMPONENT] = cm->pipe->shm_prev_mbs_U;
       f->mbs[V_COMPONENT] = cm->pipe->shm_prev_mbs_V;
@@ -180,20 +197,9 @@ struct frame* create_frame(struct c63_common *cm, int role)
       break;
   }
 
-  // These are shared in all modes
   f->recons->Y = cm->pipe->shm_recons_Y;
   f->recons->U = cm->pipe->shm_recons_U;
   f->recons->V = cm->pipe->shm_recons_V;
-
-  f->predicted->Y = cm->pipe->shm_predicted_Y;
-  f->predicted->U = cm->pipe->shm_predicted_U;
-  f->predicted->V = cm->pipe->shm_predicted_V;
-
-  if (role != FRAME_REF) {
-    cudaMemset(f->mbs[Y_COMPONENT], 0, cm->num_mbs_luma * sizeof(struct macroblock));
-    cudaMemset(f->mbs[U_COMPONENT], 0, cm->num_mbs_chroma * sizeof(struct macroblock));
-    cudaMemset(f->mbs[V_COMPONENT], 0, cm->num_mbs_chroma * sizeof(struct macroblock));
-  }
 
   return f;
 }
@@ -214,14 +220,6 @@ void prepare_next_frame(struct c63_common *cm)
   cm->refframe = cm->curframe;
   cm->curframe = cm->nextframe;
   cm->nextframe = f;
-
-  SWAP_POINTERS(cm->pipe->shm_prev_mbs_Y, cm->pipe->shm_mbs_Y, struct macroblock *);
-  SWAP_POINTERS(cm->pipe->shm_prev_mbs_U, cm->pipe->shm_mbs_U, struct macroblock *);
-  SWAP_POINTERS(cm->pipe->shm_prev_mbs_V, cm->pipe->shm_mbs_V, struct macroblock *);
-
-  SWAP_POINTERS(cm->pipe->prev_residuals_Y, cm->pipe->residuals_Y, int16_t *);
-  SWAP_POINTERS(cm->pipe->prev_residuals_U, cm->pipe->residuals_U, int16_t *);
-  SWAP_POINTERS(cm->pipe->prev_residuals_V, cm->pipe->residuals_V, int16_t *);
 }
 
 

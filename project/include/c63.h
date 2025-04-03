@@ -99,6 +99,7 @@ struct c63_pipeline {
 
   // preemptively reading
   uint8_t *shm_next_Y, *shm_next_U, *shm_next_V;
+  uint8_t *shm_next_predicted_Y, *shm_next_predicted_U, *shm_next_predicted_V;
   // writing in the background
   struct macroblock *shm_prev_mbs_Y, *shm_prev_mbs_U, *shm_prev_mbs_V;
   int16_t *prev_residuals_Y, *prev_residuals_U, *prev_residuals_V;
@@ -146,8 +147,11 @@ struct c63_common
   int pthreads_run;
 
   //pthread_t pth_dct_idct[COLOR_COMPONENTS];
-  pthread_barrier_t pth_barrier_dct_idct_start;
-  pthread_barrier_t pth_barrier_dct_idct_end;
+  pthread_barrier_t pth_barrier_dct_start;
+  pthread_barrier_t pth_barrier_dct_end;
+
+  pthread_barrier_t pth_barrier_idct_start;
+  pthread_barrier_t pth_barrier_idct_end;
 
   //pthread_t pth_write_frame;
   pthread_mutex_t pth_mutex_write_frame;

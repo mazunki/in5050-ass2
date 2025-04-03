@@ -441,7 +441,7 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
 
     startTrace3("Motion compensation");
     c63_motion_compensate(cm);
-    endTrace();
+    endTrace3();
     CUDA_ASSERT(cudaDeviceSynchronize());
   }
 
@@ -454,10 +454,10 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
     */
   startTrace2("dequantize");
 
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_idct_end);
 
-  endTrace();
+  endTrace2();
 
   startTrace3("Dump image");
 #ifndef C63_PRED
@@ -467,10 +467,10 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
   /* To dump the predicted frames, use this instead */
   dump_image(cm->curframe->predicted, cm->width, cm->height, fout);
 #endif
-  endTrace();
+  endTrace3();
 
   ++cm->framenum;
-  endTrace(); // Encode image
+  endTrace2(); // Encode image
 }
 
 static void print_help(int argc, char **argv)
@@ -503,8 +503,8 @@ int main(int argc, char **argv)
   cm->pthreads_run = 1;
 
   // +1 for main thread
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS + 1);
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS + 1);
 
   pthread_create(&threads[0], NULL, pthread_idct_Y, (void *) cm);
   pthread_create(&threads[1], NULL, pthread_idct_U, (void *) cm);
@@ -527,7 +527,7 @@ int main(int argc, char **argv)
      */
     startTrace2("Parse frame");
     parse_c63_frame(cm);
-    endTrace();
+    endTrace1();
 
      /**
      * @param[in]  fin
@@ -536,21 +536,21 @@ int main(int argc, char **argv)
     decode_c63_frame(cm, fout);
 
     framenum++;
-    endTrace();
+    endTrace1();
   }
 
   cm->pthreads_run = 0;
 
   // trigger final round for clean exit
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_idct_end);
 
   for (int i = 0; i < N_THREADS; i++) {
     pthread_join(threads[i], NULL);
   }
 
-  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
+  pthread_barrier_destroy(&cm->pth_barrier_idct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_idct_end);
 
   c63_pipeline_free(cm->pipe);
   free(cm);

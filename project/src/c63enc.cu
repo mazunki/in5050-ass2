@@ -31,57 +31,51 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
-#define N_THREADS (COLOR_COMPONENTS + 1)
+#define N_THREADS (2*COLOR_COMPONENTS + 1)
 static pthread_t threads[N_THREADS];
+static int dirty = 1;
 void cleanup_cm(void) {
+  if (!dirty) return;
   for (int i=0; i < N_THREADS; i++) {
     pthread_cancel(threads[i]);
   }
 }
 
-static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
-{
+
+static yuv_t* read_yuv(FILE *file, frame *f, struct c63_common *cm) {
   size_t len = 0;
 
-  yuv_t *image = cm->nextframe->orig;
-  uint8_t *Y = image->Y;
-  uint8_t *U = image->U;
-  uint8_t *V = image->V;
+  uint8_t *Y = f->orig->Y;
+  uint8_t *U = f->orig->U;
+  uint8_t *V = f->orig->V;
 
-  len += fread(Y, 1, cm->width*cm->height, file);
-  len += fread(U, 1, (cm->width*cm->height)/4, file);
-  len += fread(V, 1, (cm->width*cm->height)/4, file);
+  len += fread(Y, 1, cm->width * cm->height, file);
+  len += fread(U, 1, (cm->width * cm->height) / 4, file);
+  len += fread(V, 1, (cm->width * cm->height) / 4, file);
 
   if (ferror(file)) {
     perror("ferror");
     exit(EXIT_FAILURE);
-  } else if (len != cm->width*cm->height*1.5) {
+  } else if (len != cm->width * cm->height * 1.5) {
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", cm->height, cm->width);
     return NULL;
   }
 
-  return image;
+  f->keyframe = (cm->framenum % cm->keyframe_interval == 0);
+  cm->framenum++;
+
+  return f->orig;
 }
 
 static void c63_encode_image(struct c63_common *cm)
 {
   startTrace1("Encode image");
 
-  c63_pipeline *pipe = cm->pipe;
-
   prepare_next_frame(cm);
-
-  if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval) {
-    cm->curframe->keyframe = 1;
-    cm->frames_since_keyframe = 0;
-  } else {
-    cm->curframe->keyframe = 0;
-  }
 
   if (!cm->curframe->keyframe) {
     startTrace2("stream image");
-    CUDA_ASSERT(cudaStreamSynchronize(pipe->stream_image));
     pthread_mutex_lock(&cm->pth_mutex_write_frame);
     pthread_mutex_unlock(&cm->pth_mutex_write_frame);
     endTrace();
@@ -92,21 +86,20 @@ static void c63_encode_image(struct c63_common *cm)
   }
 
   startTrace2("quantize+dequantize");
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  pthread_barrier_wait(&cm->pth_barrier_dct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_end);
+
+  pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_idct_end);
   endTrace();
 
   startTrace2("Writing to Disk");
-
   pthread_mutex_lock(&cm->pth_mutex_write_frame);
   cm->unwritten_frame = cm->curframe;
   pthread_cond_signal(&cm->pth_cond_write_frame);
   pthread_mutex_unlock(&cm->pth_mutex_write_frame);
-
   endTrace();
 
-  ++cm->framenum;
-  ++cm->frames_since_keyframe;
   endTrace();
 }
 
@@ -158,16 +151,23 @@ struct c63_common* init_c63_enc(int width, int height)
 
   cm->pthreads_run = 1;
 
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS + 1);
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_start, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_end, NULL, COLOR_COMPONENTS + 1);
 
-  pthread_create(&threads[0], NULL, pthread_dct_idct_Y, (void *) cm);
-  pthread_create(&threads[1], NULL, pthread_dct_idct_U, (void *) cm);
-  pthread_create(&threads[2], NULL, pthread_dct_idct_V, (void *) cm);
+  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS + 1);
+
+  pthread_create(&threads[0], NULL, pthread_dct_Y, (void *) cm);
+  pthread_create(&threads[1], NULL, pthread_dct_U, (void *) cm);
+  pthread_create(&threads[2], NULL, pthread_dct_V, (void *) cm);
+
+  pthread_create(&threads[3], NULL, pthread_idct_Y, (void *) cm);
+  pthread_create(&threads[4], NULL, pthread_idct_U, (void *) cm);
+  pthread_create(&threads[5], NULL, pthread_idct_V, (void *) cm);
 
   pthread_mutex_init(&cm->pth_mutex_write_frame, NULL);
   pthread_cond_init(&cm->pth_cond_write_frame, NULL);
-  pthread_create(&threads[3], NULL, pthread_write_frame, (void *) cm);
+  pthread_create(&threads[6], NULL, pthread_write_frame, (void *) cm);
 
   atexit(cleanup_cm);
 
@@ -195,82 +195,53 @@ static void print_help()
   exit(EXIT_FAILURE);
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   int c;
 
   if (argc == 1) { print_help(); }
 
-  while ((c = getopt(argc, argv, "h:w:o:f:i:")) != -1)
-  {
-    switch (c)
-    {
-      case 'h':
-        height = atoi(optarg);
-        break;
-      case 'w':
-        width = atoi(optarg);
-        break;
-      case 'o':
-        output_file = optarg;
-        break;
-      case 'f':
-        limit_numframes = atoi(optarg);
-        break;
-      default:
-        print_help();
-        break;
+  while ((c = getopt(argc, argv, "h:w:o:f:")) != -1) {
+    switch (c) {
+      case 'h': height = atoi(optarg); break;
+      case 'w': width = atoi(optarg); break;
+      case 'o': output_file = optarg; break;
+      case 'f': limit_numframes = atoi(optarg); break;
+      default: exit(EXIT_FAILURE);
     }
   }
 
-  if (optind >= argc)
-  {
-    fprintf(stderr, "Error getting program options, try --help.\n");
-    exit(EXIT_FAILURE);
-  }
+  if (optind >= argc) { fprintf(stderr, "Missing input file.\n"); exit(EXIT_FAILURE); }
+
+  input_file = argv[optind];
+  FILE *infile = fopen(input_file, "rb");
+  if (!infile) { perror("fopen input"); exit(EXIT_FAILURE); }
 
   outfile = fopen(output_file, "wb");
-  if (outfile == NULL) {
-    perror("fopen");
-    exit(EXIT_FAILURE);
-  }
+  if (!outfile) { perror("fopen output"); exit(EXIT_FAILURE); }
 
   struct c63_common *cm = init_c63_enc(width, height);
   cm->e_ctx.fp = outfile;
 
-  input_file = argv[optind];
-  if (limit_numframes) {
-    fprintf(stderr, "Limited to %d frames.\n", limit_numframes);
-  }
-
-  FILE *infile = fopen(input_file, "rb");
-  if (infile == NULL) {
-    perror("fopen");
-    exit(EXIT_FAILURE);
-  }
+  // Prime both curframe and nextframe
+  if (!read_yuv(infile, cm->curframe, cm)) exit(EXIT_FAILURE);
+  if (!read_yuv(infile, cm->nextframe, cm)) exit(EXIT_FAILURE);
 
   int numframes = 0;
-  if (read_yuv(infile, cm) == NULL) {
-    exit(EXIT_FAILURE);
-  }
+  int pending = 2;
 
-  int done = 0;
-  while (!done) {
+  while (pending) {
     if (fpeek(infile) == EOF) {
-      done = 1;
-    } else if (read_yuv(infile, cm) == NULL) {
-      exit(EXIT_FAILURE);
+      pending--;
+    } else if (!read_yuv(infile, cm->nextframe, cm)) {
+      pending--;
     }
 
-    printf("Encoding frame %d...", numframes+1);
+    printf("Encoding frame %d...", numframes + 1);
     c63_encode_image(cm);
     printf(" done!\n");
 
     ++numframes;
-
-    if (limit_numframes && numframes >= limit_numframes) {
-      break;
-    }
+    if (limit_numframes && numframes >= limit_numframes) break;
   }
 
   destroy_frame(cm->nextframe);
@@ -281,27 +252,27 @@ int main(int argc, char **argv)
   pthread_cond_broadcast(&cm->pth_cond_write_frame);
 
   cm->pthreads_run = 0;
+  pthread_barrier_wait(&cm->pth_barrier_dct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_end);
+  pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_idct_end);
 
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
-
-  for (int i = 0; i < N_THREADS; i++) {
-    pthread_join(threads[i], NULL);
-  }
+  for (int i = 0; i < N_THREADS; i++) pthread_join(threads[i], NULL);
 
   pthread_mutex_destroy(&cm->pth_mutex_write_frame);
   pthread_cond_destroy(&cm->pth_cond_write_frame);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_end);
+  pthread_barrier_destroy(&cm->pth_barrier_idct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_idct_end);
 
-  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
-  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
   destroy_frame(cm->curframe);
-  cm->curframe = NULL;
-
-  printf("Completed encoding! Encoded %d frames\n", numframes);
-
   free_c63_enc(cm);
   fclose(outfile);
   fclose(infile);
 
+  dirty = 0;
+
+  printf("Completed encoding! Encoded %d frames\n", numframes);
   return EXIT_SUCCESS;
 }

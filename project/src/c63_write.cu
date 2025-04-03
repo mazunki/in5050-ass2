@@ -373,7 +373,7 @@ void *pthread_write_frame(void *ptr) {
 
     startTrace4("write");
     write_frame(cm, cm->unwritten_frame);
-    endTrace();
+    endTrace4();
 
     cm->unwritten_frame = NULL;
 

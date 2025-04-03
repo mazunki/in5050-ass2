@@ -16,17 +16,8 @@
 #include "me.h"
 #include "tables.h"
 
-#include <nvToolsExt.h>
+#include "profiling.h"
 
-
-// estimation
-__global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons, macroblock *d_mbs, int comp);
-__device__ static int sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride);
-
-
-// compensation
-__global__ void c63_motion_compensate_kernel(struct macroblock *d_mbs, uint8_t *d_predicted, uint8_t *d_ref, int comp);
-__device__ void mc_block_8x8(struct macroblock *mbs, uint8_t *predicted, uint8_t *ref, int comp);
 
 /** constant memory */
 __constant__ int c_padw[COLOR_COMPONENTS];
@@ -55,32 +46,15 @@ void c63_initialize_constant_values(struct c63_common *cm)
   *
   * Motion estimation calculates the motion vectors using
   * the original image from a reference image (made by
-  * reconstructing the previous frame
+  * reconstructing the previous frame)
   *
   * This is only used during encoding, since the decoder only
   * has the original image during key-frames.
   *
-  * @param[in]  d_orig
-  * @param[in]  d_recons
-  * @param[out] d_mbs
+  * @param[in]  curr orig
+  * @param[in]  prev recons
+  * @param[out] curr mbs
   */
- __host__ void c63_motion_estimate(struct c63_common *cm)
- {
-   dim3 block_size(MACROBLOCK_SIZE, MACROBLOCK_SIZE);
-   dim3 grid_size_luma(cm->mb_cols_luma, cm->mb_rows_luma);
-   dim3 grid_size_chroma(cm->mb_cols_chroma, cm->mb_rows_chroma);
-
-   c63_pipeline *pipe = cm->pipe;
-
-   c63_motion_estimate_kernel<<<grid_size_luma, block_size, 0, pipe->stream_estimate_Y>>>(cm->curframe->orig->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], Y_COMPONENT);
-   CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_Y, pipe->stream_estimate_Y));
-
-   c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_U>>>(cm->curframe->orig->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], U_COMPONENT);
-   CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_U, pipe->stream_estimate_U));
-
-   c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_V>>>(cm->curframe->orig->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], V_COMPONENT);
-   CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_V, pipe->stream_estimate_V));
- }
 
  /**
   * @brief Sums up the Sum of Absolute Difference between two blocks.
@@ -166,21 +140,40 @@ void c63_initialize_constant_values(struct c63_common *cm)
   }
 
 
-  // Top-level kernel
-  __global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons,
-                                             macroblock *d_mbs, int comp)
-  {
-    int mb_x = blockIdx.x;
-    int mb_y = blockIdx.y;
+__global__ void c63_motion_estimate_kernel(uint8_t *d_orig, uint8_t *d_recons,
+                                           macroblock *d_mbs, int comp)
+{
+  int mb_x = blockIdx.x;
+  int mb_y = blockIdx.y;
 
-    if (mb_x >= c_mb_cols[comp] || mb_y >= c_mb_rows[comp])
-      return;
+  if (mb_x >= c_mb_cols[comp] || mb_y >= c_mb_rows[comp]) return;
 
-    macroblock *mb = &d_mbs[mb_y * c_mb_cols[comp] + mb_x];
+  macroblock *mb = &d_mbs[mb_y * c_mb_cols[comp] + mb_x];
+  me_block_8x8(mb, mb_x, mb_y, d_orig, d_recons, c_padw[comp], c_padh[comp], c_me_search_range);
+}
 
-    me_block_8x8(mb, mb_x, mb_y, d_orig, d_recons,
-                 c_padw[comp], c_padh[comp], c_me_search_range);
-  }
+__host__ void c63_motion_estimate(struct c63_common *cm)
+{
+  startTrace3("estimate");
+  dim3 block_size(MACROBLOCK_SIZE, MACROBLOCK_SIZE);
+  dim3 grid_size_luma(cm->mb_cols_luma, cm->mb_rows_luma);
+  dim3 grid_size_chroma(cm->mb_cols_chroma, cm->mb_rows_chroma);
+
+  c63_pipeline *pipe = cm->pipe;
+
+  c63_motion_estimate_kernel<<<grid_size_luma,   block_size, 0, pipe->stream_estimate_Y>>>(cm->curframe->orig->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], Y_COMPONENT);
+  CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_Y, pipe->stream_estimate_Y));
+
+  c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_U>>>(cm->curframe->orig->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], U_COMPONENT);
+  CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_U, pipe->stream_estimate_U));
+
+  c63_motion_estimate_kernel<<<grid_size_chroma, block_size, 0, pipe->stream_estimate_V>>>(cm->curframe->orig->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], V_COMPONENT);
+  CUDA_CHECK();
+  CUDA_ASSERT(cudaEventRecord(pipe->event_estimate_V, pipe->stream_estimate_V));
+  endTrace3();
+}
 
 
 
@@ -194,9 +187,9 @@ void c63_initialize_constant_values(struct c63_common *cm)
   *
   * This is used both during encoding and decoding.
   *
-  * @param[in]  d_mbs
-  * @param[out] d_predicted
-  * @param[in]  d_ref
+  * @param[in]  curr mbs
+  * @param[out] curr predicted
+  * @param[in]  curr ref == prev recons
   */
 
   __global__ void c63_motion_compensate_kernel(uint8_t *predicted, const uint8_t *ref, struct macroblock *mbs, int w, int mb_width)
@@ -219,19 +212,24 @@ void c63_initialize_constant_values(struct c63_common *cm)
 
   void c63_motion_compensate(struct c63_common *cm)
   {
+    startTrace3("compensate");
     dim3 block_size(8, 8);
     dim3 grid_size_luma(cm->mb_cols_luma, cm->mb_rows_luma);
     dim3 grid_size_chroma(cm->mb_cols_chroma, cm->mb_rows_chroma);
 
-    cudaStreamWaitEvent(cm->pipe->stream_compensate_Y, cm->pipe->event_estimate_Y);
-    c63_motion_compensate_kernel<<<grid_size_luma,   block_size, 0, cm->pipe->stream_compensate_Y>>>( cm->curframe->predicted->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], cm->mb_cols_luma );
-    cudaEventRecord(cm->pipe->event_compensate_Y, cm->pipe->stream_compensate_Y);
+    CUDA_ASSERT(cudaStreamWaitEvent(cm->pipe->stream_compensate_Y, cm->pipe->event_estimate_Y));
+    c63_motion_compensate_kernel<<<grid_size_luma,   block_size, 0, cm->pipe->stream_compensate_Y>>>(cm->curframe->predicted->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], cm->mb_cols_luma);
+    CUDA_CHECK();
+    CUDA_ASSERT(cudaEventRecord(cm->pipe->event_compensate_Y, cm->pipe->stream_compensate_Y));
 
-    cudaStreamWaitEvent(cm->pipe->stream_compensate_U, cm->pipe->event_estimate_U);
-    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_U>>>( cm->curframe->predicted->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], cm->padw[U_COMPONENT], cm->mb_cols_chroma );
-    cudaEventRecord(cm->pipe->event_compensate_U, cm->pipe->stream_compensate_U);
+    CUDA_ASSERT(cudaStreamWaitEvent(cm->pipe->stream_compensate_U, cm->pipe->event_estimate_U));
+    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_U>>>(cm->curframe->predicted->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], cm->padw[U_COMPONENT], cm->mb_cols_chroma);
+    CUDA_CHECK();
+    CUDA_ASSERT(cudaEventRecord(cm->pipe->event_compensate_U, cm->pipe->stream_compensate_U));
 
-    cudaStreamWaitEvent(cm->pipe->stream_compensate_V, cm->pipe->event_estimate_V);
-    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_V>>>( cm->curframe->predicted->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], cm->padw[V_COMPONENT], cm->mb_cols_chroma );
-    cudaEventRecord(cm->pipe->event_compensate_V, cm->pipe->stream_compensate_V);
+    CUDA_ASSERT(cudaStreamWaitEvent(cm->pipe->stream_compensate_V, cm->pipe->event_estimate_V));
+    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_V>>>(cm->curframe->predicted->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], cm->padw[V_COMPONENT], cm->mb_cols_chroma);
+    CUDA_CHECK();
+    CUDA_ASSERT(cudaEventRecord(cm->pipe->event_compensate_V, cm->pipe->stream_compensate_V));
+    endTrace3();
   }
