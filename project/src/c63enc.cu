@@ -74,29 +74,34 @@ static void c63_encode_image(struct c63_common *cm)
 
   prepare_next_frame(cm);
 
-  if (!cm->curframe->keyframe) {
-    startTrace2("stream image");
-    pthread_mutex_lock(&cm->pth_mutex_write_frame);
-    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+  // Step 1: Launch ME on nextframe (can overlap with dequant of curframe)
+  if (!cm->nextframe->keyframe) {
+    startTrace2("Motion Estimation (nextframe)");
+    c63_motion_estimate(cm); // [in] nextframe->orig + refframe->recons, [out] nextframe->mbs
     endTrace();
-
-    c63_motion_estimate(cm);
-
-    c63_motion_compensate(cm);
   }
 
+  // Step 2: Launch MC on curframe (must happen before quant of nextframe)
+  if (!cm->curframe->keyframe) {
+    startTrace2("Motion Compensation (curframe)");
+    c63_motion_compensate(cm); // [in] curframe->mbs + refframe->recons, [out] curframe->predicted
+    endTrace();
+  }
+
+  // Step 3: quantize+dequantize
   startTrace2("quantize+dequantize");
-  pthread_barrier_wait(&cm->pth_barrier_dct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_start);   // [in] nextframe->{orig, predicted}, [out] curframe->residuals
   pthread_barrier_wait(&cm->pth_barrier_dct_end);
 
-  pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_idct_start);  // [in] curframe->{residuals, predicted}, [out] curframe->recons
   pthread_barrier_wait(&cm->pth_barrier_idct_end);
   endTrace();
 
+  // Step 4: Writing to Disk
   startTrace2("Writing to Disk");
   pthread_mutex_lock(&cm->pth_mutex_write_frame);
   cm->unwritten_frame = cm->curframe;
-  pthread_cond_signal(&cm->pth_cond_write_frame);
+  pthread_cond_signal(&cm->pth_cond_write_frame);  // [in] curframe->{mbs, residuals}
   pthread_mutex_unlock(&cm->pth_mutex_write_frame);
   endTrace();
 
