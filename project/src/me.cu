@@ -171,52 +171,39 @@ void c63_initialize_constant_values(struct c63_common *cm)
   * @param[in]  d_ref
   */
 
- static void mc_block_8x8( struct c63_common *cm, int mb_x, int mb_y, uint8_t *predicted, uint8_t *ref, int color_component )
- {
-   struct macroblock *mb = &cm->curframe->mbs[color_component][mb_y * cm->padw[color_component] / 8 + mb_x];
+  __global__ void mc_block_8x8_kernel(uint8_t *predicted, const uint8_t *ref, struct macroblock *mbs, int w, int mb_width)
+  {
+    int mb_x = blockIdx.x;
+    int mb_y = blockIdx.y;
 
-   if ( !mb->use_mv )
-   {
-     return;
-   }
+    struct macroblock mb = mbs[mb_y * mb_width + mb_x];
+    if (!mb.use_mv) return;
 
-   int left = mb_x * 8;
-   int top = mb_y * 8;
-   int right = left + 8;
-   int bottom = top + 8;
+    int dst_x = mb_x * 8 + threadIdx.x;
+    int dst_y = mb_y * 8 + threadIdx.y;
 
-   int w = cm->padw[color_component];
+    int src_x = dst_x + mb.mv_x;
+    int src_y = dst_y + mb.mv_y;
 
-   /* Copy block from ref mandated by MV */
-   int x, y;
+    predicted[dst_y * w + dst_x] = ref[src_y * w + src_x];
+  }
 
-   for ( y = top; y < bottom; ++y ) {
-     for ( x = left; x < right; ++x ) {
-       predicted[y * w + x] = ref[( y + mb->mv_y ) * w + ( x + mb->mv_x )];
-     }
-   }
- }
 
- void c63_motion_compensate( struct c63_common *cm )
- {
-   int mb_x, mb_y;
+  void c63_motion_compensate(struct c63_common *cm)
+  {
+    dim3 block_size(8, 8);
+    dim3 grid_size_luma(cm->mb_cols_luma, cm->mb_rows_luma);
+    dim3 grid_size_chroma(cm->mb_cols_chroma, cm->mb_rows_chroma);
 
-   /* Luma */
-   for ( mb_y = 0; mb_y < cm->mb_rows_luma; ++mb_y )
-   {
-     for ( mb_x = 0; mb_x < cm->mb_cols_luma; ++mb_x )
-     {
-       mc_block_8x8( cm, mb_x, mb_y, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT );
-     }
-   }
+    cudaStreamWaitEvent(cm->pipe->stream_compensate_Y, cm->pipe->event_estimate_Y);
+    mc_block_8x8_kernel<<<grid_size_luma,   block_size, 0, cm->pipe->stream_compensate_Y>>>( cm->curframe->predicted->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], cm->mb_cols_luma );
+    cudaEventRecord(cm->pipe->event_compensate_Y, cm->pipe->stream_compensate_Y);
 
-   /* Chroma */
-   for ( mb_y = 0; mb_y < cm->mb_rows_chroma ; ++mb_y )
-   {
-     for ( mb_x = 0; mb_x < cm->mb_cols_chroma; ++mb_x )
-     {
-       mc_block_8x8( cm, mb_x, mb_y, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT );
-       mc_block_8x8( cm, mb_x, mb_y, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT );
-     }
-   }
- }
+    cudaStreamWaitEvent(cm->pipe->stream_compensate_U, cm->pipe->event_estimate_U);
+    mc_block_8x8_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_U>>>( cm->curframe->predicted->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], cm->padw[U_COMPONENT], cm->mb_cols_chroma );
+    cudaEventRecord(cm->pipe->event_compensate_U, cm->pipe->stream_compensate_U);
+
+    cudaStreamWaitEvent(cm->pipe->stream_compensate_V, cm->pipe->event_estimate_V);
+    mc_block_8x8_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_V>>>( cm->curframe->predicted->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], cm->padw[V_COMPONENT], cm->mb_cols_chroma );
+    cudaEventRecord(cm->pipe->event_compensate_V, cm->pipe->stream_compensate_V);
+  }
