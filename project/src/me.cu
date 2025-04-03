@@ -148,10 +148,8 @@ void c63_initialize_constant_values(struct c63_common *cm)
     // Safe atomicMin — the thread that finds the min SAD will match below
     int old_sad = atomicMin(&s_best_sad, local_best_sad);
 
-    __syncthreads();
-
     // Only one thread writes mv_x/mv_y
-    if (local_best_sad == s_best_sad)
+    if (local_best_sad < old_sad)
     {
       s_best_mv_x = local_best_x;
       s_best_mv_y = local_best_y;
@@ -201,7 +199,7 @@ void c63_initialize_constant_values(struct c63_common *cm)
   * @param[in]  d_ref
   */
 
-  __global__ void mc_block_8x8_kernel(uint8_t *predicted, const uint8_t *ref, struct macroblock *mbs, int w, int mb_width)
+  __global__ void c63_motion_compensate_kernel(uint8_t *predicted, const uint8_t *ref, struct macroblock *mbs, int w, int mb_width)
   {
     int mb_x = blockIdx.x;
     int mb_y = blockIdx.y;
@@ -226,14 +224,14 @@ void c63_initialize_constant_values(struct c63_common *cm)
     dim3 grid_size_chroma(cm->mb_cols_chroma, cm->mb_rows_chroma);
 
     cudaStreamWaitEvent(cm->pipe->stream_compensate_Y, cm->pipe->event_estimate_Y);
-    mc_block_8x8_kernel<<<grid_size_luma,   block_size, 0, cm->pipe->stream_compensate_Y>>>( cm->curframe->predicted->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], cm->mb_cols_luma );
+    c63_motion_compensate_kernel<<<grid_size_luma,   block_size, 0, cm->pipe->stream_compensate_Y>>>( cm->curframe->predicted->Y, cm->refframe->recons->Y, cm->curframe->mbs[Y_COMPONENT], cm->padw[Y_COMPONENT], cm->mb_cols_luma );
     cudaEventRecord(cm->pipe->event_compensate_Y, cm->pipe->stream_compensate_Y);
 
     cudaStreamWaitEvent(cm->pipe->stream_compensate_U, cm->pipe->event_estimate_U);
-    mc_block_8x8_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_U>>>( cm->curframe->predicted->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], cm->padw[U_COMPONENT], cm->mb_cols_chroma );
+    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_U>>>( cm->curframe->predicted->U, cm->refframe->recons->U, cm->curframe->mbs[U_COMPONENT], cm->padw[U_COMPONENT], cm->mb_cols_chroma );
     cudaEventRecord(cm->pipe->event_compensate_U, cm->pipe->stream_compensate_U);
 
     cudaStreamWaitEvent(cm->pipe->stream_compensate_V, cm->pipe->event_estimate_V);
-    mc_block_8x8_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_V>>>( cm->curframe->predicted->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], cm->padw[V_COMPONENT], cm->mb_cols_chroma );
+    c63_motion_compensate_kernel<<<grid_size_chroma, block_size, 0, cm->pipe->stream_compensate_V>>>( cm->curframe->predicted->V, cm->refframe->recons->V, cm->curframe->mbs[V_COMPONENT], cm->padw[V_COMPONENT], cm->mb_cols_chroma );
     cudaEventRecord(cm->pipe->event_compensate_V, cm->pipe->stream_compensate_V);
   }
