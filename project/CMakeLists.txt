@@ -2,6 +2,14 @@
 
 cmake_minimum_required(VERSION 3.14)
 
+#=== extracted from in5050-toolchain.cmake to make the life of griff easier :)
+set(ENV{CUDA_HOME} "/usr/local/cuda")
+set(ENV{PATH} "$ENV{CUDA_HOME}/bin:$ENV{PATH}")
+set(ENV{LD_LIBRARY_PATH} "$ENV{CUDA_HOME}/lib64:$ENV{LD_LIBRARY_PATH}")
+include_directories("/opt/nvidia/hpc_sdk/Linux_x86_64/25.1/compilers/include-stdpar/nvtx3")
+#===
+
+
 #
 # This tells CMake that your project's name is homeexam-01, and that the programs
 # here are written in C.
@@ -24,7 +32,6 @@ set(TRACE_LEVEL $ENV{TRACE_LEVEL})
 if (NOT TRACE_LEVEL)
   set(TRACE_LEVEL 4)
 endif()
-
 set(CMAKE_C_FLAGS_DEBUG "-ggdb3 -pg -O1 -fno-tree-vectorize -DNDEBUG -DTRACE_LEVEL=${TRACE_LEVEL}")
 set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -DNDEBUG -DTRACE_LEVEL=${TRACE_LEVEL}")
 
@@ -49,8 +56,8 @@ endif()
 
 # Debug compiles with -g or equivalent for debugging.
 # Change to Release for good speed.
-set(CMAKE_BUILD_TYPE Debug)
-# set(CMAKE_BUILD_TYPE Release)
+# set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -96,13 +103,3 @@ add_executable(c63pred
                src/c63dec.cu include/c63.h)
 target_link_libraries(c63pred c63 m nvToolsExt)
 target_compile_options(c63pred PUBLIC -DC63_PRED)
-
-
-# if(EXISTS "/etc/nv_tegra_release")
-#   if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
-#     target_compile_options(c63 PRIVATE -Xcompiler=-march=armv8.2-a)
-#     target_compile_options(c63enc PRIVATE -Xcompiler=-march=armv8.2-a)
-#     target_compile_options(c63dec PRIVATE -Xcompiler=-march=armv8.2-a)
-#     target_compile_options(c63pred PRIVATE -Xcompiler=-march=armv8.2-a)
-#   endif()
-# endif()
