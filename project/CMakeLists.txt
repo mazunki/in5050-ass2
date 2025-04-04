@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.14)
 set(ENV{CUDA_HOME} "/usr/local/cuda")
 set(ENV{PATH} "$ENV{CUDA_HOME}/bin:$ENV{PATH}")
 set(ENV{LD_LIBRARY_PATH} "$ENV{CUDA_HOME}/lib64:$ENV{LD_LIBRARY_PATH}")
-include_directories("/opt/nvidia/hpc_sdk/Linux_x86_64/25.1/compilers/include-stdpar/nvtx3")
+include_directories(/opt/nvidia/nsight-systems/2023.2.4/target-linux-tegra-armv8/nvtx/include/nvtx3)
 #===
 
 
@@ -56,8 +56,11 @@ endif()
 
 # Debug compiles with -g or equivalent for debugging.
 # Change to Release for good speed.
-# set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE $ENV{CMAKE_BUILD_TYPE})
+if (NOT CMAKE_BUILD_TYPE)
+  # set(CMAKE_BUILD_TYPE Debug)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 

@@ -72,13 +72,19 @@ struct c63_pipeline* c63_pipeline_init(size_t frame_size, size_t chroma_size, si
   CUDA_ASSERT(cudaEventCreate(&pipe->event_compensate_U));
   CUDA_ASSERT(cudaEventCreate(&pipe->event_compensate_V));
 
-  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_image));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_estimate_Y));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_estimate_U));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_estimate_V));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_compensate_Y));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_compensate_U));
   CUDA_ASSERT(cudaStreamCreate(&pipe->stream_compensate_V));
+
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_dct_Y));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_dct_U));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_dct_V));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_idct_Y));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_idct_U));
+  CUDA_ASSERT(cudaStreamCreate(&pipe->stream_idct_V));
 
   return pipe;
 }
@@ -135,13 +141,19 @@ void c63_pipeline_free(struct c63_pipeline *pipe)
   cudaEventDestroy(pipe->event_compensate_U);
   cudaEventDestroy(pipe->event_compensate_V);
 
-  cudaStreamDestroy(pipe->stream_image);
   cudaStreamDestroy(pipe->stream_estimate_Y);
   cudaStreamDestroy(pipe->stream_estimate_U);
   cudaStreamDestroy(pipe->stream_estimate_V);
   cudaStreamDestroy(pipe->stream_compensate_Y);
   cudaStreamDestroy(pipe->stream_compensate_U);
   cudaStreamDestroy(pipe->stream_compensate_V);
+
+  cudaStreamDestroy(pipe->stream_dct_Y);
+  cudaStreamDestroy(pipe->stream_dct_U);
+  cudaStreamDestroy(pipe->stream_dct_V);
+  cudaStreamDestroy(pipe->stream_idct_Y);
+  cudaStreamDestroy(pipe->stream_idct_U);
+  cudaStreamDestroy(pipe->stream_idct_V);
 }
 
 

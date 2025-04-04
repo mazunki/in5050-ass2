@@ -107,7 +107,9 @@ struct c63_pipeline {
 #ifdef __CUDACC__ // CUDA contexts
   cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
   cudaStream_t stream_compensate_Y, stream_compensate_U, stream_compensate_V;
-  cudaStream_t stream_image;
+
+  cudaStream_t stream_dct_Y, stream_dct_U, stream_dct_V;
+  cudaStream_t stream_idct_Y, stream_idct_U, stream_idct_V;
 
   cudaEvent_t event_estimate_Y, event_estimate_U, event_estimate_V;
   cudaEvent_t event_compensate_Y, event_compensate_U, event_compensate_V;

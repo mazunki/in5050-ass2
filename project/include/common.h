@@ -32,8 +32,10 @@
 #define DEBUG(fmt, ...) fprintf(stderr, "[DEBUG] %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 #else
 #define DEBUG(fmt, ...)
-#define CUDA_CHECK(call)
+#undef CUDA_CHECK
 #define CUDA_CHECK()
+#undef CUDA_ASSERT
+#define CUDA_ASSERT(call)
 #endif
 
 #define SWAP_POINTERS(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)

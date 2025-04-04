@@ -45,7 +45,7 @@ pipeline() {
 	(set -x; rsync -av --progress . "${BUILDER}:${PROJECT_ROOT}/")
 
 	echo "[PIPELINE] updating cmake..."
-	builder "cd '${PROJECT_ROOT}' && rm -rf build && cmake -B build"
+	builder "cd '${PROJECT_ROOT}' && rm -rf build && cmake -B build -DCMAKE_BUILD_TYPE='${BUILD_MODE}' -DTRACE_LEVEL='${TRACE_LEVEL}'"
 
 	echo "[PIPELINE] building project..."
 	builder "cd '${BUILD_DIR}' && make"

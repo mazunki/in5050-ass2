@@ -23,17 +23,13 @@
 #define endTrace9(name)
 #define endTrace10(name)
 
-#ifdef NDEBUG
+#ifdef TRACE_LEVEL
   #include <nvToolsExt.h>
 
   #undef startTrace
   #undef endTrace
   #define startTrace(name) nvtxRangePush(name)
   #define endTrace(name) nvtxRangePop()
-
-  #ifndef TRACE_LEVEL
-    #define TRACE_LEVEL 4
-  #endif
 
   #if TRACE_LEVEL >= 1
     #undef startTrace1
