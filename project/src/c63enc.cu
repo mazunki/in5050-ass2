@@ -59,6 +59,7 @@ static yuv_t* read_yuv(FILE *file, frame *f, struct c63_common *cm) {
   } else if (len != cm->width * cm->height * 1.5) {
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", cm->height, cm->width);
+    DEBUG("seeing that your student is free from captivity fills you with determination");
     return NULL;
   }
 
@@ -70,25 +71,22 @@ static yuv_t* read_yuv(FILE *file, frame *f, struct c63_common *cm) {
 
 static void c63_encode_image(struct c63_common *cm)
 {
-  startTrace1("Encode image");
+  startTrace1("encode image");
 
   prepare_next_frame(cm);
 
-  // Step 1: Launch ME on nextframe (can overlap with dequant of curframe)
   if (!cm->nextframe->keyframe) {
-    startTrace2("Motion Estimation (nextframe)");
+    startTrace2("estimation");
     c63_motion_estimate(cm); // [in] nextframe->orig + refframe->recons, [out] nextframe->mbs
     endTrace();
   }
 
-  // Step 2: Launch MC on curframe (must happen before quant of nextframe)
   if (!cm->curframe->keyframe) {
-    startTrace2("Motion Compensation (curframe)");
+    startTrace2("compensation");
     c63_motion_compensate(cm); // [in] curframe->mbs + refframe->recons, [out] curframe->predicted
     endTrace();
   }
 
-  // Step 3: quantize+dequantize
   startTrace2("quantize+dequantize");
   pthread_barrier_wait(&cm->pth_barrier_dct_start);   // [in] nextframe->{orig, predicted}, [out] curframe->residuals
   pthread_barrier_wait(&cm->pth_barrier_dct_end);
@@ -97,8 +95,7 @@ static void c63_encode_image(struct c63_common *cm)
   pthread_barrier_wait(&cm->pth_barrier_idct_end);
   endTrace();
 
-  // Step 4: Writing to Disk
-  startTrace2("Writing to Disk");
+  startTrace2("writing to disk");
   pthread_mutex_lock(&cm->pth_mutex_write_frame);
   cm->unwritten_frame = cm->curframe;
   pthread_cond_signal(&cm->pth_cond_write_frame);  // [in] curframe->{mbs, residuals}

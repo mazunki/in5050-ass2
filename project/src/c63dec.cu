@@ -19,7 +19,9 @@
 
 #define N_THREADS COLOR_COMPONENTS
 static pthread_t threads[N_THREADS];
+static int dirty = 1;
 void cleanup_cm(void) {
+  if (!dirty) return;
   for (int i=0; i < N_THREADS; i++) {
     pthread_cancel(threads[i]);
   }
@@ -558,6 +560,8 @@ int main(int argc, char **argv)
   fclose(fin);
   fclose(fout);
   printf("Decoding successful! Found %d frames\n", framenum);
+
+  dirty = 0;
 
   return 0;
 }
