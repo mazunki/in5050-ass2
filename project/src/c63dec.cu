@@ -17,12 +17,12 @@
 
 #include "profiling.h"
 
-#define N_THREADS COLOR_COMPONENTS
-static pthread_t threads[N_THREADS];
+static int pthread_total_threads;
+static pthread_t *threads;
 static int dirty = 1;
 void cleanup_cm(void) {
   if (!dirty) return;
-  for (int i=0; i < N_THREADS; i++) {
+  for (int i=0; i < pthread_total_threads; i++) {
     pthread_cancel(threads[i]);
   }
 }
@@ -503,15 +503,29 @@ int main(int argc, char **argv)
   rewind(fin);
 
   cm->pthreads_run = 1;
+  cm->pthreads_component_num_workers = 1;
+
+  int nworkers = COLOR_COMPONENTS * cm->pthreads_component_num_workers;
+  pthread_total_threads = nworkers + 1; // workers + writer
+
+  threads = (pthread_t *) calloc(pthread_total_threads, sizeof(pthread_t));
 
   // +1 for main thread
-  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS + 1);
-  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
 
-  pthread_create(&threads[0], NULL, pthread_idct_Y, (void *) cm);
-  pthread_create(&threads[1], NULL, pthread_idct_U, (void *) cm);
-  pthread_create(&threads[2], NULL, pthread_idct_V, (void *) cm);
+  struct worker_ctx *ctx = (struct worker_ctx *) malloc(nworkers*sizeof(struct worker_ctx));
 
+  for (int w = 0; w < cm->pthreads_component_num_workers; ++w) {
+    for (int c = 0; c < COLOR_COMPONENTS; ++c) {
+      int idx = w * COLOR_COMPONENTS + c;
+      ctx[idx].cm = cm;
+      ctx[idx].component = c;
+      ctx[idx].worker_id = w;
+
+      pthread_create(&threads[idx], NULL, pthread_idct, &ctx[idx]);
+    }
+  }
   atexit(cleanup_cm);
 
 
@@ -547,7 +561,7 @@ int main(int argc, char **argv)
   pthread_barrier_wait(&cm->pth_barrier_idct_start);
   pthread_barrier_wait(&cm->pth_barrier_idct_end);
 
-  for (int i = 0; i < N_THREADS; i++) {
+  for (int i = 0; i < pthread_total_threads; i++) {
     pthread_join(threads[i], NULL);
   }
 

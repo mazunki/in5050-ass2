@@ -31,12 +31,12 @@ static uint32_t height;
 extern int optind;
 extern char *optarg;
 
-#define N_THREADS (2*COLOR_COMPONENTS + 1)
-static pthread_t threads[N_THREADS];
+static int pthread_total_threads;
+static pthread_t *threads;
 static int dirty = 1;
 void cleanup_cm(void) {
   if (!dirty) return;
-  for (int i=0; i < N_THREADS; i++) {
+  for (int i=0; i < pthread_total_threads; i++) {
     pthread_cancel(threads[i]);
   }
 }
@@ -88,11 +88,11 @@ static void c63_encode_image(struct c63_common *cm)
   }
 
   startTrace2("quantize+dequantize");
-  pthread_barrier_wait(&cm->pth_barrier_dct_start);   // [in] nextframe->{orig, predicted}, [out] curframe->residuals
-  pthread_barrier_wait(&cm->pth_barrier_dct_end);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);   // [in] nextframe->{orig, predicted}, [out] curframe->residuals
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
 
-  pthread_barrier_wait(&cm->pth_barrier_idct_start);  // [in] curframe->{residuals, predicted}, [out] curframe->recons
-  pthread_barrier_wait(&cm->pth_barrier_idct_end);
+  // pthread_barrier_wait(&cm->pth_barrier_idct_start);  // [in] curframe->{residuals, predicted}, [out] curframe->recons
+  // pthread_barrier_wait(&cm->pth_barrier_idct_end);
   endTrace();
 
   startTrace2("writing to disk");
@@ -152,24 +152,32 @@ struct c63_common* init_c63_enc(int width, int height)
   initialize_dctlookup_values();
 
   cm->pthreads_run = 1;
+  cm->pthreads_component_num_workers = 2;
 
-  pthread_barrier_init(&cm->pth_barrier_dct_start, NULL, COLOR_COMPONENTS + 1);
-  pthread_barrier_init(&cm->pth_barrier_dct_end, NULL, COLOR_COMPONENTS + 1);
+  int nworkers = COLOR_COMPONENTS * cm->pthreads_component_num_workers;
+  pthread_total_threads = nworkers + 1; // workers + writer
 
-  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS + 1);
-  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS + 1);
+  threads = (pthread_t *) calloc(pthread_total_threads, sizeof(pthread_t));
 
-  pthread_create(&threads[0], NULL, pthread_dct_Y, (void *) cm);
-  pthread_create(&threads[1], NULL, pthread_dct_U, (void *) cm);
-  pthread_create(&threads[2], NULL, pthread_dct_V, (void *) cm);
-
-  pthread_create(&threads[3], NULL, pthread_idct_Y, (void *) cm);
-  pthread_create(&threads[4], NULL, pthread_idct_U, (void *) cm);
-  pthread_create(&threads[5], NULL, pthread_idct_V, (void *) cm);
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
 
   pthread_mutex_init(&cm->pth_mutex_write_frame, NULL);
   pthread_cond_init(&cm->pth_cond_write_frame, NULL);
   pthread_create(&threads[6], NULL, pthread_write_frame, (void *) cm);
+
+  struct worker_ctx *ctx = (struct worker_ctx *) malloc(nworkers*sizeof(struct worker_ctx));
+
+  for (int w = 0; w < cm->pthreads_component_num_workers; ++w) {
+    for (int c = 0; c < COLOR_COMPONENTS; ++c) {
+      int idx = w * COLOR_COMPONENTS + c;
+      ctx[idx].cm = cm;
+      ctx[idx].component = c;
+      ctx[idx].worker_id = w;
+
+      pthread_create(&threads[idx], NULL, pthread_dct_idct, &ctx[idx]);
+    }
+  }
 
   atexit(cleanup_cm);
 
@@ -254,19 +262,19 @@ int main(int argc, char **argv) {
   pthread_cond_broadcast(&cm->pth_cond_write_frame);
 
   cm->pthreads_run = 0;
-  pthread_barrier_wait(&cm->pth_barrier_dct_start);
-  pthread_barrier_wait(&cm->pth_barrier_dct_end);
-  pthread_barrier_wait(&cm->pth_barrier_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_idct_end);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  // pthread_barrier_wait(&cm->pth_barrier_idct_start);
+  // pthread_barrier_wait(&cm->pth_barrier_idct_end);
 
-  for (int i = 0; i < N_THREADS; i++) pthread_join(threads[i], NULL);
+  for (int i = 0; i < pthread_total_threads; i++) pthread_join(threads[i], NULL);
 
   pthread_mutex_destroy(&cm->pth_mutex_write_frame);
   pthread_cond_destroy(&cm->pth_cond_write_frame);
-  pthread_barrier_destroy(&cm->pth_barrier_dct_start);
-  pthread_barrier_destroy(&cm->pth_barrier_dct_end);
-  pthread_barrier_destroy(&cm->pth_barrier_idct_start);
-  pthread_barrier_destroy(&cm->pth_barrier_idct_end);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_start);
+  pthread_barrier_destroy(&cm->pth_barrier_dct_idct_end);
+  // pthread_barrier_destroy(&cm->pth_barrier_idct_start);
+  // pthread_barrier_destroy(&cm->pth_barrier_idct_end);
 
   destroy_frame(cm->curframe);
   free_c63_enc(cm);

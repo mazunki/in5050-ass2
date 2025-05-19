@@ -71,7 +71,7 @@ static inline void dequantize_idct_V(struct c63_common *cm, uintptr_t offset) {
 }
 
 // pthread wrappers
-void *dct_worker(struct c63_common *cm, intptr_t component)
+static void *dct_idct_worker(struct c63_common *cm, intptr_t component, intptr_t worker_idx)
 {
   uint32_t WIDTH, HEIGHT;
   switch (component) {
@@ -87,29 +87,35 @@ void *dct_worker(struct c63_common *cm, intptr_t component)
   }
 
   while (true) {
-    pthread_barrier_wait(&cm->pth_barrier_dct_start);
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
 
     // shutdown from main thread
     if (!cm->pthreads_run) {
-      pthread_barrier_wait(&cm->pth_barrier_dct_end);
+      pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
       break;
     }
 
-    for (uint i = 0; i < HEIGHT / MACROBLOCK_SIZE; i++) {
-      uintptr_t offset = i * WIDTH * MACROBLOCK_SIZE;
+    for (uint row = worker_idx; row < HEIGHT / MACROBLOCK_SIZE; row += cm->pthreads_component_num_workers) {
+      uintptr_t offset = row * WIDTH * MACROBLOCK_SIZE;
       switch (component) {
         case Y_COMPONENT: dct_quantize_Y(cm, offset); break;
         case U_COMPONENT: dct_quantize_U(cm, offset); break;
         case V_COMPONENT: dct_quantize_V(cm, offset); break;
       }
+
+      switch (component) {
+        case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
+        case U_COMPONENT: dequantize_idct_U(cm, offset); break;
+        case V_COMPONENT: dequantize_idct_V(cm, offset); break;
+      }
     }
 
-    pthread_barrier_wait(&cm->pth_barrier_dct_end);
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
   }
 
   return NULL;
 }
-void *idct_worker(struct c63_common *cm, intptr_t component)
+static void *idct_worker(struct c63_common *cm, intptr_t component, intptr_t worker_idx)
 {
   uint32_t WIDTH, HEIGHT;
   switch (component) {
@@ -133,8 +139,8 @@ void *idct_worker(struct c63_common *cm, intptr_t component)
       break;
     }
 
-    for (uint i = 0; i < HEIGHT / MACROBLOCK_SIZE; i++) {
-      uintptr_t offset = i * WIDTH * MACROBLOCK_SIZE;
+    for (uint row = worker_idx; row < HEIGHT / MACROBLOCK_SIZE; row += cm->pthreads_component_num_workers) {
+      uintptr_t offset = row * WIDTH * MACROBLOCK_SIZE;
       switch (component) {
         case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
         case U_COMPONENT: dequantize_idct_U(cm, offset); break;
@@ -148,23 +154,13 @@ void *idct_worker(struct c63_common *cm, intptr_t component)
   return NULL;
 }
 
-void *pthread_dct_Y(void *ptr) {
-  return dct_worker((struct c63_common *) ptr, Y_COMPONENT);
-}
-void *pthread_dct_U(void *ptr) {
-  return dct_worker((struct c63_common *) ptr, U_COMPONENT);
-}
-void *pthread_dct_V(void *ptr) {
-  return dct_worker((struct c63_common *) ptr, V_COMPONENT);
+void *pthread_dct_idct(void *ptr) {
+  struct worker_ctx *ctx = (struct worker_ctx *) ptr;
+  return dct_idct_worker(ctx->cm, ctx->component, ctx->worker_id);
 }
 
+void *pthread_idct(void *ptr) {
+  struct worker_ctx *ctx = (struct worker_ctx *) ptr;
+  return idct_worker(ctx->cm, ctx->component, ctx->worker_id);
+}
 
-void *pthread_idct_Y(void *ptr) {
-  return idct_worker((struct c63_common *) ptr, Y_COMPONENT);
-}
-void *pthread_idct_U(void *ptr) {
-  return idct_worker((struct c63_common *) ptr, U_COMPONENT);
-}
-void *pthread_idct_V(void *ptr) {
-  return idct_worker((struct c63_common *) ptr, V_COMPONENT);
-}
