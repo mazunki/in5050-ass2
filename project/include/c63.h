@@ -20,6 +20,11 @@
 #define U_COMPONENT 1
 #define V_COMPONENT 2
 
+#define TASK_LUMA 0
+#define TASK_CHROMA 1
+#define TASK_POOLS 2
+
+
 #define YX 2
 #define YY 2
 #define UX 1
@@ -147,10 +152,14 @@ struct c63_common
   struct c63_pipeline *pipe;
 
   int pthreads_run;
+  int pthreads_luma_threads, pthreads_chroma_threads;
 
   //pthread_t pth_dct_idct[COLOR_COMPONENTS];
-  pthread_barrier_t pth_barrier_dct_start;
-  pthread_barrier_t pth_barrier_dct_end;
+  uint32_t        pth_next_row[TASK_POOLS];      // task counters
+  pthread_mutex_t pth_mutex_next_row[TASK_POOLS];
+
+  pthread_barrier_t pth_barrier_dct_idct_start;
+  pthread_barrier_t pth_barrier_dct_idct_end;
 
   pthread_barrier_t pth_barrier_idct_start;
   pthread_barrier_t pth_barrier_idct_end;

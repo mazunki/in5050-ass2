@@ -16,6 +16,11 @@
 extern "C" {
 #endif // __cplusplus
 
+struct worker_ctx {
+  struct c63_common *cm;
+  int component;
+};
+
 //void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint8_t *out_data);
 void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, uint8_t *out);
 
@@ -31,16 +36,11 @@ void dct_quantize_U(struct c63_common *cm);
 void dct_quantize_V(struct c63_common *cm);
 
 void dct_idct_Y(struct c63_common *cm);
-void *pthread_dct_Y(void *ptr);
-void *pthread_idct_Y(void *ptr);
-
 void dct_idct_U(struct c63_common *cm);
-void *pthread_dct_U(void *ptr);
-void *pthread_idct_U(void *ptr);
-
 void dct_idct_V(struct c63_common *cm);
-void *pthread_dct_V(void *ptr);
-void *pthread_idct_V(void *ptr);
+
+void *pthread_dct_idct(void *ptr);
+void *pthread_idct(void *ptr);
 
 void initialize_dctlookup_values();
 void initialize_quantization_values(const uint8_t *tbl, uint32_t padw, uint32_t padh);
