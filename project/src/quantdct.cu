@@ -21,40 +21,31 @@ void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uintptr_
  *   @param[in]  predicted
  *   @param[out] residuals
  */
-void dct_quantize_Y(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dct_quantize_Y(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_Y));
   endTrace();
 
   startTrace5("dct Y");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct, offset);
-  }
+  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct, offset);
   endTrace();
 }
-void dct_quantize_U(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dct_quantize_U(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_U));
   endTrace();
 
   startTrace5("dct U");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct, offset);
-  }
+  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct, offset);
   endTrace();
 }
-void dct_quantize_V(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dct_quantize_V(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_V));
   endTrace();
 
   startTrace5("dct V");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct, offset);
-  }
+  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct, offset);
   endTrace();
 }
 
@@ -63,28 +54,19 @@ void dct_quantize_V(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
  *   @param[in]  predicted
  *   @param[out] recons
  */
-void dequantize_idct_Y(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dequantize_idct_Y(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct Y");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y, offset);
-  }
+  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y, offset);
   endTrace5();
 }
-void dequantize_idct_U(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dequantize_idct_U(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct U");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U, offset);
-  }
+  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U, offset);
   endTrace5();
 }
-void dequantize_idct_V(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
+void dequantize_idct_V(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct V");
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    uintptr_t offset = y * WIDTH;
-    dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V, offset);
-  }
+  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V, offset);
   endTrace5();
 }
 
@@ -113,10 +95,13 @@ void *dct_worker(struct c63_common *cm, intptr_t component)
       break;
     }
 
-    switch (component) {
-      case Y_COMPONENT: dct_quantize_Y(cm, HEIGHT, WIDTH); break;
-      case U_COMPONENT: dct_quantize_U(cm, HEIGHT, WIDTH); break;
-      case V_COMPONENT: dct_quantize_V(cm, HEIGHT, WIDTH); break;
+    for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+      uintptr_t offset = y * WIDTH;
+      switch (component) {
+        case Y_COMPONENT: dct_quantize_Y(cm, offset); break;
+        case U_COMPONENT: dct_quantize_U(cm, offset); break;
+        case V_COMPONENT: dct_quantize_V(cm, offset); break;
+      }
     }
 
     pthread_barrier_wait(&cm->pth_barrier_dct_end);
@@ -148,10 +133,13 @@ void *idct_worker(struct c63_common *cm, intptr_t component)
       break;
     }
 
-    switch (component) {
-      case Y_COMPONENT: dequantize_idct_Y(cm, HEIGHT, WIDTH); break;
-      case U_COMPONENT: dequantize_idct_U(cm, HEIGHT, WIDTH); break;
-      case V_COMPONENT: dequantize_idct_V(cm, HEIGHT, WIDTH); break;
+    for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+      uintptr_t offset = y * WIDTH;
+      switch (component) {
+        case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
+        case U_COMPONENT: dequantize_idct_U(cm, offset); break;
+        case V_COMPONENT: dequantize_idct_V(cm, offset); break;
+      }
     }
 
     pthread_barrier_wait(&cm->pth_barrier_idct_end);
