@@ -164,7 +164,7 @@ static void dequant_idct_block_8x8(const int16_t *in, int16_t *out)
   endTrace7();
 }
 
-static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, uint8_t *out)
+void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, uint8_t *out)
 {
   startTrace6("deq row");
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
@@ -188,7 +188,7 @@ static void dequantize_idct_row(const int16_t *in, const uint8_t *prediction, ui
   endTrace6();
 }
 
-static void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int16_t *out)
+void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int16_t *out)
 {
   startTrace6("quant row");
   int16_t block[MACROBLOCK_SIZE * MACROBLOCK_SIZE];
@@ -212,19 +212,4 @@ static void dct_quantize_row(const uint8_t *in, uint8_t *prediction, int16_t *ou
     dct_quant_block_8x8(block, out + (x * MACROBLOCK_SIZE));
   }
   endTrace6();
-}
-
-void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out)
-{
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
-  }
-}
-
-
-void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out)
-{
-  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dct_quantize_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
-  }
 }

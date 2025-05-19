@@ -5,6 +5,21 @@
 #include "profiling.h"
 #include <pthread.h>
 
+void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out, uint32_t HEIGHT, uint32_t WIDTH)
+{
+  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+  }
+}
+
+
+void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uint32_t HEIGHT, uint32_t WIDTH)
+{
+  for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
+    dct_quantize_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+  }
+}
+
 /** quantize (slow CPU-only function)
  *   @param[in]  orig
  *   @param[in]  predicted
@@ -16,7 +31,7 @@ void dct_quantize_Y(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct Y");
-  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct);
+  dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct, cm->yph, cm->ypw);
   endTrace();
 }
 void dct_quantize_U(struct c63_common *cm) {
@@ -25,7 +40,7 @@ void dct_quantize_U(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct U");
-  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct);
+  dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct, cm->uph, cm->upw);
   endTrace();
 }
 void dct_quantize_V(struct c63_common *cm) {
@@ -34,7 +49,7 @@ void dct_quantize_V(struct c63_common *cm) {
   endTrace();
 
   startTrace5("dct V");
-  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct);
+  dct_quantize(cm->curframe->orig->V, cm->curframe->predicted->V, cm->curframe->residuals->Vdct, cm->vph, cm->vpw);
   endTrace();
 }
 
@@ -45,17 +60,17 @@ void dct_quantize_V(struct c63_common *cm) {
  */
 void dequantize_idct_Y(struct c63_common *cm) {
   startTrace5("idct Y");
-  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y);
+  dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y, cm->yph, cm->ypw);
   endTrace5();
 }
 void dequantize_idct_U(struct c63_common *cm) {
   startTrace5("idct U");
-  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U);
+  dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U, cm->uph, cm->upw);
   endTrace5();
 }
 void dequantize_idct_V(struct c63_common *cm) {
   startTrace5("idct V");
-  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V);
+  dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V, cm->vph, cm->vpw);
   endTrace5();
 }
 
