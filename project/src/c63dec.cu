@@ -503,8 +503,8 @@ int main(int argc, char **argv)
   rewind(fin);
 
   cm->pthreads_run = 1;
-  cm->pthreads_luma_threads = 1;
-  cm->pthreads_chroma_threads = 1;
+  cm->pthreads_luma_threads = 4;
+  cm->pthreads_chroma_threads = 2;
 
 
   for (int c = 0; c < TASK_POOLS; ++c) {

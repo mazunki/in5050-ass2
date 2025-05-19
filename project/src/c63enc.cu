@@ -152,8 +152,8 @@ struct c63_common* init_c63_enc(int width, int height)
   initialize_dctlookup_values();
 
   cm->pthreads_run = 1;
-  cm->pthreads_luma_threads = 1;
-  cm->pthreads_chroma_threads = 1;
+  cm->pthreads_luma_threads = 4;
+  cm->pthreads_chroma_threads = 2;
 
   for (int c = 0; c < TASK_POOLS; ++c) {
     cm->pth_next_row[c] = 0;
