@@ -154,6 +154,12 @@ struct c63_common* init_c63_enc(int width, int height)
   cm->pthreads_run = 1;
   cm->pthreads_component_num_workers = 2;
 
+
+  for (int c = 0; c < COLOR_COMPONENTS; ++c) {
+    cm->pth_next_row[c] = 0;
+    pthread_mutex_init(&cm->pth_mutex_next_row[c], NULL);
+  }
+
   int nworkers = COLOR_COMPONENTS * cm->pthreads_component_num_workers;
   pthread_total_threads = nworkers + 1; // workers + writer
 
