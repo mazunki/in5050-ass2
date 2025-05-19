@@ -73,108 +73,119 @@ static inline void dequantize_idct_V(struct c63_common *cm, uintptr_t offset) {
 
 static void *dct_idct_worker(void *arg)
 {
-    struct worker_ctx *ctx = (struct worker_ctx *)arg;
-    struct c63_common *cm  = ctx->cm;
-    const int  component   = ctx->component;
+  struct worker_ctx *ctx = (struct worker_ctx *)arg;
+  struct c63_common *cm  = ctx->cm;
+  const int pool   = ctx->component;
 
-    uint32_t width, height;
-    switch (component) {
-        case Y_COMPONENT: width = cm->ypw; height = cm->yph; break;
-        case U_COMPONENT: width = cm->upw; height = cm->uph; break;
-        case V_COMPONENT: width = cm->vpw; height = cm->vph; break;
+  uint32_t width, height;
+  switch (pool) {
+    case TASK_LUMA:
+      width = cm->ypw;
+      height = cm->yph;
+      initialize_quantization_values(cm->quanttbl[Y_COMPONENT], cm->ypw, cm->yph);
+      break;
+
+    case TASK_CHROMA:
+      width = cm->upw; // =vpw
+      height = cm->uph; // =upw
+      initialize_quantization_values(cm->quanttbl[U_COMPONENT], width, height); // quanttbl[u == v]
+      break;
+  }
+
+  while (true) {
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
+    if (!cm->pthreads_run) {
+      pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+      break; // shutdown
     }
-    initialize_quantization_values(cm->quanttbl[component], width, height);
 
-    while (true) {
-        pthread_barrier_wait(&cm->pth_barrier_dct_idct_start);
-        if (!cm->pthreads_run) {
-            pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
-            break; // shutdown
-        }
+    pthread_mutex_lock(&cm->pth_mutex_next_row[pool]);
+    cm->pth_next_row[pool] = 0;
+    pthread_mutex_unlock(&cm->pth_mutex_next_row[pool]);
 
-        // first worker of each component resets task counter
-        if (ctx->worker_id == 0)
-            cm->pth_next_row[component] = 0;
+    for (;;) {
+      // claim a task
+      pthread_mutex_lock  (&cm->pth_mutex_next_row[pool]);
+      uint32_t row = cm->pth_next_row[pool];
+      cm->pth_next_row[pool] += 1;
+      pthread_mutex_unlock(&cm->pth_mutex_next_row[pool]);
 
-        for (;;) {
-            // claim a task
-            pthread_mutex_lock  (&cm->pth_mutex_next_row[component]);
-            uint32_t row = cm->pth_next_row[component];
-            cm->pth_next_row[component] += 1;
-            pthread_mutex_unlock(&cm->pth_mutex_next_row[component]);
+      if (row >= height / MACROBLOCK_SIZE)
+        break; // nothing more to do
 
-            if (row >= height / MACROBLOCK_SIZE)
-                break; // nothing more to do
+      uintptr_t offset = row * width * MACROBLOCK_SIZE;
 
-            uintptr_t offset = row * width * MACROBLOCK_SIZE;
+      // dct
+      switch (pool) {
+        case TASK_LUMA: dct_quantize_Y(cm, offset); break;
+        case TASK_CHROMA: dct_quantize_U(cm, offset); dct_quantize_V(cm, offset); break;
+      }
 
-            // dct
-            switch (component) {
-                case Y_COMPONENT: dct_quantize_Y(cm, offset); break;
-                case U_COMPONENT: dct_quantize_U(cm, offset); break;
-                case V_COMPONENT: dct_quantize_V(cm, offset); break;
-            }
-
-            // idct
-            switch (component) {
-                case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
-                case U_COMPONENT: dequantize_idct_U(cm, offset); break;
-                case V_COMPONENT: dequantize_idct_V(cm, offset); break;
-            }
-        }
-
-        pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+      // idct
+      switch (pool) {
+        case TASK_LUMA: dequantize_idct_Y(cm, offset); break;
+        case TASK_CHROMA: dequantize_idct_U(cm, offset); dequantize_idct_V(cm, offset); break;
+      }
     }
-    return NULL;
+
+    pthread_barrier_wait(&cm->pth_barrier_dct_idct_end);
+  }
+  return NULL;
 }
 static void *idct_worker(void *arg)
 {
-    struct worker_ctx *ctx = (struct worker_ctx *)arg;
-    struct c63_common *cm  = ctx->cm;
-    const int  component   = ctx->component;
+  struct worker_ctx *ctx = (struct worker_ctx *)arg;
+  struct c63_common *cm  = ctx->cm;
+  const int  pool   = ctx->component;
 
-    uint32_t width, height;
-    switch (component) {
-        case Y_COMPONENT: width = cm->ypw; height = cm->yph; break;
-        case U_COMPONENT: width = cm->upw; height = cm->uph; break;
-        case V_COMPONENT: width = cm->vpw; height = cm->vph; break;
+  uint32_t width, height;
+  switch (pool) {
+    case TASK_LUMA:
+      width = cm->ypw;
+      height = cm->yph;
+      initialize_quantization_values(cm->quanttbl[Y_COMPONENT], cm->ypw, cm->yph);
+      break;
+
+    case TASK_CHROMA:
+      width = cm->upw; // =vpw
+      height = cm->uph; // =upw
+      initialize_quantization_values(cm->quanttbl[U_COMPONENT], width, height); // quanttbl[u == v]
+      break;
+  }
+
+  while (true) {
+    pthread_barrier_wait(&cm->pth_barrier_idct_start);
+    if (!cm->pthreads_run) {
+      pthread_barrier_wait(&cm->pth_barrier_idct_end);
+      break; // shutdown
     }
-    initialize_quantization_values(cm->quanttbl[component], width, height);
 
-    while (true) {
-        pthread_barrier_wait(&cm->pth_barrier_idct_start);
-        if (!cm->pthreads_run) {
-            pthread_barrier_wait(&cm->pth_barrier_idct_end);
-            break; // shutdown
-        }
+    pthread_mutex_lock(&cm->pth_mutex_next_row[pool]);
+    cm->pth_next_row[pool] = 0;
+    pthread_mutex_unlock(&cm->pth_mutex_next_row[pool]);
 
-        // first worker of each component resets task counter
-        if (ctx->worker_id == 0)
-            cm->pth_next_row[component] = 0;
+    for (;;) {
+      // claim a task
+      pthread_mutex_lock(&cm->pth_mutex_next_row[pool]);
+      uint32_t row = cm->pth_next_row[pool];
+      cm->pth_next_row[pool] += 1;
+      pthread_mutex_unlock(&cm->pth_mutex_next_row[pool]);
 
-        for (;;) {
-            // claim a task
-            pthread_mutex_lock(&cm->pth_mutex_next_row[component]);
-            uint32_t row = cm->pth_next_row[component];
-            cm->pth_next_row[component] += 1;
-            pthread_mutex_unlock(&cm->pth_mutex_next_row[component]);
+      if (row >= height / MACROBLOCK_SIZE)
+        break; // nothing more to do
 
-            if (row >= height / MACROBLOCK_SIZE)
-                break; // nothing more to do
+      uintptr_t offset = row * width * MACROBLOCK_SIZE;
 
-            uintptr_t offset = row * width * MACROBLOCK_SIZE;
-
-            // idct
-            switch (component) {
-                case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
-                case U_COMPONENT: dequantize_idct_U(cm, offset); break;
-                case V_COMPONENT: dequantize_idct_V(cm, offset); break;
-            }
-        }
-
-        pthread_barrier_wait(&cm->pth_barrier_idct_end);
+      // idct
+      switch (pool) {
+        case TASK_LUMA: dequantize_idct_Y(cm, offset); break;
+        case TASK_CHROMA: dequantize_idct_U(cm, offset); dequantize_idct_V(cm, offset); break;
+      }
     }
-    return NULL;
+
+    pthread_barrier_wait(&cm->pth_barrier_idct_end);
+  }
+  return NULL;
 }
 
 void *pthread_dct_idct(void *ptr) {

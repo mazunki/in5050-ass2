@@ -503,29 +503,39 @@ int main(int argc, char **argv)
   rewind(fin);
 
   cm->pthreads_run = 1;
-  cm->pthreads_component_num_workers = 1;
+  cm->pthreads_luma_threads = 1;
+  cm->pthreads_chroma_threads = 1;
 
-  int nworkers = COLOR_COMPONENTS * cm->pthreads_component_num_workers;
+
+  for (int c = 0; c < TASK_POOLS; ++c) {
+    cm->pth_next_row[c] = 0;
+    pthread_mutex_init(&cm->pth_mutex_next_row[c], NULL);
+  }
+
+  int nworkers = cm->pthreads_luma_threads + cm->pthreads_chroma_threads;
   pthread_total_threads = nworkers + 1; // workers + writer
 
   threads = (pthread_t *) calloc(pthread_total_threads, sizeof(pthread_t));
 
   // +1 for main thread
-  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
-  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
+  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, nworkers + 1);  // +1 for main thread
+  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, nworkers + 1);
 
   struct worker_ctx *ctx = (struct worker_ctx *) malloc(nworkers*sizeof(struct worker_ctx));
 
-  for (int w = 0; w < cm->pthreads_component_num_workers; ++w) {
-    for (int c = 0; c < COLOR_COMPONENTS; ++c) {
-      int idx = w * COLOR_COMPONENTS + c;
-      ctx[idx].cm = cm;
-      ctx[idx].component = c;
-      ctx[idx].worker_id = w;
-
-      pthread_create(&threads[idx], NULL, pthread_idct, &ctx[idx]);
-    }
+  int t = 0;
+  for (int i = 0; i < cm->pthreads_luma_threads; ++i, ++t) {
+    ctx[t].cm = cm;
+    ctx[t].component = TASK_LUMA;
+    pthread_create(&threads[t], NULL, pthread_idct, &ctx[t]);
   }
+
+  for (int i = 0; i < cm->pthreads_chroma_threads; ++i, ++t) {
+    ctx[t].cm = cm;
+    ctx[t].component = TASK_CHROMA;
+    pthread_create(&threads[t], NULL, pthread_idct, &ctx[t]);
+  }
+
   atexit(cleanup_cm);
 
 

@@ -152,37 +152,39 @@ struct c63_common* init_c63_enc(int width, int height)
   initialize_dctlookup_values();
 
   cm->pthreads_run = 1;
-  cm->pthreads_component_num_workers = 2;
+  cm->pthreads_luma_threads = 1;
+  cm->pthreads_chroma_threads = 1;
 
-
-  for (int c = 0; c < COLOR_COMPONENTS; ++c) {
+  for (int c = 0; c < TASK_POOLS; ++c) {
     cm->pth_next_row[c] = 0;
     pthread_mutex_init(&cm->pth_mutex_next_row[c], NULL);
   }
 
-  int nworkers = COLOR_COMPONENTS * cm->pthreads_component_num_workers;
+  int nworkers = cm->pthreads_luma_threads + cm->pthreads_chroma_threads;
   pthread_total_threads = nworkers + 1; // workers + writer
 
   threads = (pthread_t *) calloc(pthread_total_threads, sizeof(pthread_t));
 
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
-  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, COLOR_COMPONENTS * cm->pthreads_component_num_workers + 1);
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_start, NULL, nworkers + 1);  // +1 for main thread
+  pthread_barrier_init(&cm->pth_barrier_dct_idct_end, NULL, nworkers + 1);
 
   pthread_mutex_init(&cm->pth_mutex_write_frame, NULL);
   pthread_cond_init(&cm->pth_cond_write_frame, NULL);
-  pthread_create(&threads[6], NULL, pthread_write_frame, (void *) cm);
+  pthread_create(&threads[nworkers], NULL, pthread_write_frame, (void *) cm);
 
   struct worker_ctx *ctx = (struct worker_ctx *) malloc(nworkers*sizeof(struct worker_ctx));
 
-  for (int w = 0; w < cm->pthreads_component_num_workers; ++w) {
-    for (int c = 0; c < COLOR_COMPONENTS; ++c) {
-      int idx = w * COLOR_COMPONENTS + c;
-      ctx[idx].cm = cm;
-      ctx[idx].component = c;
-      ctx[idx].worker_id = w;
+  int t = 0;
+  for (int i = 0; i < cm->pthreads_luma_threads; ++i, ++t) {
+    ctx[t].cm = cm;
+    ctx[t].component = TASK_LUMA;
+    pthread_create(&threads[t], NULL, pthread_dct_idct, &ctx[t]);
+  }
 
-      pthread_create(&threads[idx], NULL, pthread_dct_idct, &ctx[idx]);
-    }
+  for (int i = 0; i < cm->pthreads_chroma_threads; ++i, ++t) {
+    ctx[t].cm = cm;
+    ctx[t].component = TASK_CHROMA;
+    pthread_create(&threads[t], NULL, pthread_dct_idct, &ctx[t]);
   }
 
   atexit(cleanup_cm);
