@@ -5,13 +5,13 @@
 #include "profiling.h"
 #include <pthread.h>
 
-void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out, uintptr_t offset)
+static inline void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out, uintptr_t offset)
 {
   dequantize_idct_row(in + offset, prediction + offset, out + offset);
 }
 
 
-void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uintptr_t offset)
+static inline void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uintptr_t offset)
 {
   dct_quantize_row(in + offset, prediction + offset, out + offset);
 }
@@ -21,7 +21,7 @@ void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uintptr_
  *   @param[in]  predicted
  *   @param[out] residuals
  */
-void dct_quantize_Y(struct c63_common *cm, uintptr_t offset) {
+static inline void dct_quantize_Y(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_Y));
   endTrace();
@@ -30,7 +30,7 @@ void dct_quantize_Y(struct c63_common *cm, uintptr_t offset) {
   dct_quantize(cm->curframe->orig->Y, cm->curframe->predicted->Y, cm->curframe->residuals->Ydct, offset);
   endTrace();
 }
-void dct_quantize_U(struct c63_common *cm, uintptr_t offset) {
+static inline void dct_quantize_U(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_U));
   endTrace();
@@ -39,7 +39,7 @@ void dct_quantize_U(struct c63_common *cm, uintptr_t offset) {
   dct_quantize(cm->curframe->orig->U, cm->curframe->predicted->U, cm->curframe->residuals->Udct, offset);
   endTrace();
 }
-void dct_quantize_V(struct c63_common *cm, uintptr_t offset) {
+static inline void dct_quantize_V(struct c63_common *cm, uintptr_t offset) {
   startTrace5("wait pred");
   CUDA_ASSERT(cudaEventSynchronize(cm->pipe->event_compensate_V));
   endTrace();
@@ -54,17 +54,17 @@ void dct_quantize_V(struct c63_common *cm, uintptr_t offset) {
  *   @param[in]  predicted
  *   @param[out] recons
  */
-void dequantize_idct_Y(struct c63_common *cm, uintptr_t offset) {
+static inline void dequantize_idct_Y(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct Y");
   dequantize_idct(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->curframe->recons->Y, offset);
   endTrace5();
 }
-void dequantize_idct_U(struct c63_common *cm, uintptr_t offset) {
+static inline void dequantize_idct_U(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct U");
   dequantize_idct(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->curframe->recons->U, offset);
   endTrace5();
 }
-void dequantize_idct_V(struct c63_common *cm, uintptr_t offset) {
+static inline void dequantize_idct_V(struct c63_common *cm, uintptr_t offset) {
   startTrace5("idct V");
   dequantize_idct(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->curframe->recons->V, offset);
   endTrace5();
