@@ -8,7 +8,8 @@
 void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out, uint32_t HEIGHT, uint32_t WIDTH)
 {
   for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dequantize_idct_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+    uintptr_t offset = y * WIDTH;
+    dequantize_idct_row(in + offset, prediction + offset, out + offset);
   }
 }
 
@@ -16,7 +17,8 @@ void dequantize_idct(const int16_t *in, uint8_t *prediction, uint8_t *out, uint3
 void dct_quantize(const uint8_t *in, uint8_t *prediction, int16_t *out, uint32_t HEIGHT, uint32_t WIDTH)
 {
   for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-    dct_quantize_row(in + y * WIDTH, prediction + y * WIDTH, out + y * WIDTH);
+    uintptr_t offset = y * WIDTH;
+    dct_quantize_row(in + offset, prediction + offset, out + offset);
   }
 }
 
