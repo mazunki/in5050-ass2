@@ -91,10 +91,17 @@ void dequantize_idct_V(struct c63_common *cm, uint32_t HEIGHT, uint32_t WIDTH) {
 // pthread wrappers
 void *dct_worker(struct c63_common *cm, intptr_t component)
 {
+  uint32_t WIDTH, HEIGHT;
   switch (component) {
-    case Y_COMPONENT: initialize_quantization_values(cm->quanttbl[Y_COMPONENT], cm->ypw, cm->yph); break;
-    case U_COMPONENT: initialize_quantization_values(cm->quanttbl[U_COMPONENT], cm->upw, cm->uph); break;
-    case V_COMPONENT: initialize_quantization_values(cm->quanttbl[V_COMPONENT], cm->vpw, cm->vph); break;
+    case Y_COMPONENT: WIDTH=cm->ypw; HEIGHT=cm->yph; break;
+    case U_COMPONENT: WIDTH=cm->upw; HEIGHT=cm->uph; break;
+    case V_COMPONENT: WIDTH=cm->vpw; HEIGHT=cm->vph; break;
+  }
+
+  switch (component) {
+    case Y_COMPONENT: initialize_quantization_values(cm->quanttbl[Y_COMPONENT], WIDTH, HEIGHT); break;
+    case U_COMPONENT: initialize_quantization_values(cm->quanttbl[U_COMPONENT], WIDTH, HEIGHT); break;
+    case V_COMPONENT: initialize_quantization_values(cm->quanttbl[V_COMPONENT], WIDTH, HEIGHT); break;
   }
 
   while (true) {
@@ -107,9 +114,9 @@ void *dct_worker(struct c63_common *cm, intptr_t component)
     }
 
     switch (component) {
-      case Y_COMPONENT: dct_quantize_Y(cm, cm->yph, cm->ypw); break;
-      case U_COMPONENT: dct_quantize_U(cm, cm->uph, cm->upw); break;
-      case V_COMPONENT: dct_quantize_V(cm, cm->vph, cm->vpw); break;
+      case Y_COMPONENT: dct_quantize_Y(cm, HEIGHT, WIDTH); break;
+      case U_COMPONENT: dct_quantize_U(cm, HEIGHT, WIDTH); break;
+      case V_COMPONENT: dct_quantize_V(cm, HEIGHT, WIDTH); break;
     }
 
     pthread_barrier_wait(&cm->pth_barrier_dct_end);
@@ -119,10 +126,17 @@ void *dct_worker(struct c63_common *cm, intptr_t component)
 }
 void *idct_worker(struct c63_common *cm, intptr_t component)
 {
+  uint32_t WIDTH, HEIGHT;
   switch (component) {
-    case Y_COMPONENT: initialize_quantization_values(cm->quanttbl[Y_COMPONENT], cm->ypw, cm->yph); break;
-    case U_COMPONENT: initialize_quantization_values(cm->quanttbl[U_COMPONENT], cm->upw, cm->uph); break;
-    case V_COMPONENT: initialize_quantization_values(cm->quanttbl[V_COMPONENT], cm->vpw, cm->vph); break;
+    case Y_COMPONENT: WIDTH=cm->ypw; HEIGHT=cm->yph; break;
+    case U_COMPONENT: WIDTH=cm->upw; HEIGHT=cm->uph; break;
+    case V_COMPONENT: WIDTH=cm->vpw; HEIGHT=cm->vph; break;
+  }
+
+  switch (component) {
+    case Y_COMPONENT: initialize_quantization_values(cm->quanttbl[Y_COMPONENT], WIDTH, HEIGHT); break;
+    case U_COMPONENT: initialize_quantization_values(cm->quanttbl[U_COMPONENT], WIDTH, HEIGHT); break;
+    case V_COMPONENT: initialize_quantization_values(cm->quanttbl[V_COMPONENT], WIDTH, HEIGHT); break;
   }
 
   while (true) {
@@ -135,9 +149,9 @@ void *idct_worker(struct c63_common *cm, intptr_t component)
     }
 
     switch (component) {
-      case Y_COMPONENT: dequantize_idct_Y(cm, cm->yph, cm->ypw); break;
-      case U_COMPONENT: dequantize_idct_U(cm, cm->uph, cm->upw); break;
-      case V_COMPONENT: dequantize_idct_V(cm, cm->vph, cm->vpw); break;
+      case Y_COMPONENT: dequantize_idct_Y(cm, HEIGHT, WIDTH); break;
+      case U_COMPONENT: dequantize_idct_U(cm, HEIGHT, WIDTH); break;
+      case V_COMPONENT: dequantize_idct_V(cm, HEIGHT, WIDTH); break;
     }
 
     pthread_barrier_wait(&cm->pth_barrier_idct_end);
