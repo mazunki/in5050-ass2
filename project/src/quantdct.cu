@@ -95,8 +95,8 @@ void *dct_worker(struct c63_common *cm, intptr_t component)
       break;
     }
 
-    for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-      uintptr_t offset = y * WIDTH;
+    for (uint i = 0; i < HEIGHT / MACROBLOCK_SIZE; i++) {
+      uintptr_t offset = i * WIDTH * MACROBLOCK_SIZE;
       switch (component) {
         case Y_COMPONENT: dct_quantize_Y(cm, offset); break;
         case U_COMPONENT: dct_quantize_U(cm, offset); break;
@@ -133,8 +133,8 @@ void *idct_worker(struct c63_common *cm, intptr_t component)
       break;
     }
 
-    for (uint y = 0; y < HEIGHT; y += MACROBLOCK_SIZE) {
-      uintptr_t offset = y * WIDTH;
+    for (uint i = 0; i < HEIGHT / MACROBLOCK_SIZE; i++) {
+      uintptr_t offset = i * WIDTH * MACROBLOCK_SIZE;
       switch (component) {
         case Y_COMPONENT: dequantize_idct_Y(cm, offset); break;
         case U_COMPONENT: dequantize_idct_U(cm, offset); break;
