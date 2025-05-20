@@ -26,6 +26,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Overwrite default -O3 flag for Release mode
 set(CMAKE_C_FLAGS_RELEASE "-O1 -fno-tree-vectorize")
+set(CMAKE_CUDA_FLAGS_RELEASE "${CMAKE_CUDA_FLAGS_RELEASE}")
 # Make sure Debug mode flags are similar to Release mode flags
 
 set(TRACE_LEVEL $ENV{TRACE_LEVEL})
