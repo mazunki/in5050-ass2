@@ -290,7 +290,7 @@ static void write_block(struct c63_common *cm, int16_t *in_data, uint32_t width,
 
 static void write_interleaved_data_MCU(struct c63_common *cm, int16_t *dct,
     uint32_t wi, uint32_t he, uint32_t h, uint32_t v, uint32_t x, uint32_t y,
-    int16_t *prev_DC, int32_t cc, int channel, frame *f)
+    int16_t *prev_DC, int32_t cc, int channel, struct frame *f)
 {
   uint32_t i, j, uoffset, voffset;
 
@@ -310,7 +310,7 @@ static void write_interleaved_data_MCU(struct c63_common *cm, int16_t *dct,
   }
 }
 
-static void write_interleaved_data(struct c63_common *cm, frame *f)
+static void write_interleaved_data(struct c63_common *cm, struct frame *f)
 {
   int16_t prev_DC[3] = {0, 0, 0};
   uint32_t u, v;
@@ -338,7 +338,7 @@ static void write_interleaved_data(struct c63_common *cm, frame *f)
   flush_bits(&cm->e_ctx);
 }
 
-void write_frame(struct c63_common *cm, frame *f)
+void write_frame(struct c63_common *cm, struct frame *f)
 {
   /* Write headers */
 

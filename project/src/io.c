@@ -5,6 +5,9 @@
 
 #include "io.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
 // XXX: Should be moved to a struct with FILE*
 
 void put_byte(FILE *fp, int byte)
@@ -126,4 +129,8 @@ void flush_bits(struct entropy_ctx *c)
   c->bit_buffer = 0;
   c->bit_buffer_width = 0;
 }
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus
 

@@ -10,6 +10,11 @@ include_directories(/opt/nvidia/nsight-systems/2023.2.4/target-linux-tegra-armv8
 #===
 
 
+set(CMAKE_CUDA_USE_RESPONSE_FILE OFF CACHE BOOL "" FORCE)
+set(CMAKE_EXPORT_COMPILE_COMMANDS    ON  CACHE BOOL "" FORCE)
+
+
+
 #
 # This tells CMake that your project's name is homeexam-01, and that the programs
 # here are written in C.
@@ -84,26 +89,54 @@ endif()
 #     add_compile_options(-march=armv8.2-a)
 # endif()
 
-include_directories(include)
+# core libraries
+add_library(c63quant STATIC
+    src/quantdct.c src/quantdct.cu include/quantdct.h
+    src/tables.c include/tables.h
+)
+target_include_directories(c63quant PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-add_library(c63 STATIC
-            src/quantdct.c src/quantdct.cu include/quantdct.h
-            src/tables.cu include/tables.h
-            src/io.cu include/io.h
-            src/common.cu include/common.h
-            src/me.cu include/me.h)
-target_compile_options(c63 PUBLIC -I${CMAKE_SOURCE_DIR}/include)
+add_library(c63motion STATIC
+    src/common.cu include/common.h
+    src/io.c include/io.h
+    src/me.cu include/me.h
+)
+target_include_directories(c63motion PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
-add_executable(c63enc
-               src/c63enc.cu include/c63.h
-               src/c63_write.cu include/c63_write.h)
-target_link_libraries(c63enc c63 m nvToolsExt)
+add_library(c63enc STATIC
+    src/c63enc.cu include/c63enc.h
+    src/c63_write.c include/c63_write.h
+)
+target_include_directories(c63enc PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(c63enc PUBLIC c63quant c63motion m nvToolsExt pthread)
 
+# encoder client
+add_executable(c63client
+    src/c63client.c include/c63.h
+)
+target_include_directories(c63client PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(c63client PUBLIC c63enc m nvToolsExt pthread)
+
+# decoder client
 add_executable(c63dec
-               src/c63dec.cu include/c63.h)
-target_link_libraries(c63dec c63 m nvToolsExt)
+    src/c63dec.cu include/c63.h
+    src/io.c include/io.h
+)
+target_include_directories(c63dec PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(c63dec PUBLIC c63quant c63motion m nvToolsExt pthread)
 
+# predictor client
 add_executable(c63pred
-               src/c63dec.cu include/c63.h)
-target_link_libraries(c63pred c63 m nvToolsExt)
-target_compile_options(c63pred PUBLIC -DC63_PRED)
+    src/c63dec.cu include/c63.h
+    src/io.c include/io.h
+)
+target_include_directories(c63pred PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(c63pred PUBLIC C63_PRED)
+target_link_libraries(c63pred PUBLIC c63quant c63motion m nvToolsExt pthread)
+
+foreach(tgt IN ITEMS c63quant c63motion c63enc c63dec c63pred)
+  target_compile_options(${tgt} PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-I${CMAKE_SOURCE_DIR}/include>
+  )
+endforeach()
+

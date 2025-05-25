@@ -6,6 +6,10 @@
 
 #include "c63.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 // Declarations
 int read_bytes(FILE *fp, void *data, unsigned int sz);
 
@@ -20,6 +24,11 @@ void put_bits(struct entropy_ctx *c, uint16_t bits, uint8_t n);
 void put_byte(FILE *fp, int byte);
 
 void put_bytes(FILE *fp, const void* data, unsigned int len);
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus
+
 
 #endif  /* C63_IO_H_ */
 

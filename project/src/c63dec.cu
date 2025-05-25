@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -483,6 +484,23 @@ static void print_help(int argc, char **argv)
   exit(EXIT_FAILURE);
 }
 
+static int peek_soi(FILE *f) {
+    int b1 = fgetc(f);
+    if (b1 == EOF) return 0;
+    int b2 = fgetc(f);
+    if (b2 == EOF) {
+        ungetc(b1, f);
+        return 0;
+    }
+
+    // push them back
+    ungetc(b2, f);
+    ungetc(b1, f);
+
+    // JPEG SOI is 0xFF,0xD8
+    return (b1 == JPEG_DEF_MARKER && b2 == JPEG_SOI_MARKER);
+}
+
 int main(int argc, char **argv)
 {
   if(argc < 3 || argc > 3) { print_help(argc, argv); }
@@ -540,10 +558,11 @@ int main(int argc, char **argv)
 
 
   int framenum = 0;
-  while(fpeek(fin) != EOF)
+  while(peek_soi(fin))
   {
+    framenum++;
     startTrace1("Decode frame");
-    // DEBUG("Decoding frame %d", framenum);
+    DEBUG("Decoding frame %d", framenum);
     prepare_next_frame(cm);
 
     /**
@@ -561,8 +580,11 @@ int main(int argc, char **argv)
      */
     decode_c63_frame(cm, fout);
 
-    framenum++;
     endTrace1();
+
+    if (feof(fin)) {
+      break;
+    }
   }
 
   cm->pthreads_run = 0;
