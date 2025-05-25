@@ -2,7 +2,7 @@
 set -eu
 
 PROJECT_USER=in5050-g01
-PROJECT_ROOT="/home/${PROJECT_USER}/in5050-ass2/project"
+PROJECT_ROOT="/home/${PROJECT_USER}/in5050-ass3/project"
 SRC_DIR="${PROJECT_ROOT}/src"
 BUILD_DIR="${PROJECT_ROOT}/build"
 WORKDIR="${PROJECT_ROOT}/workdir"
@@ -63,7 +63,7 @@ pipeline() {
 	runner "mkdir -p '${WORKDIR}'"
 
 
-	cmd_enc="${BUILD_DIR}/c63enc -h '${VID_HEIGHT}' -w '${VID_WIDTH}' ${VID_FLAGS} -o '${VID_OUTPUT_ENC}' '${VID_INPUT}'"
+	cmd_enc="${BUILD_DIR}/c63client -h '${VID_HEIGHT}' -w '${VID_WIDTH}' ${VID_FLAGS} -o '${VID_OUTPUT_ENC}' '${VID_INPUT}'"
 	cmd_dec="${BUILD_DIR}/c63dec '${VID_OUTPUT_ENC}' '${VID_OUTPUT_DEC}'"
 	echo ${cmd_dec}
 
