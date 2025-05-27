@@ -94,36 +94,10 @@ struct frame
   int keyframe;
 };
 
-struct c63_pipeline {
-  uint8_t *shm_orig_Y, *shm_orig_U, *shm_orig_V;
-  uint8_t *shm_recons_Y, *shm_recons_U, *shm_recons_V;
-  uint8_t *shm_refframe_Y, *shm_refframe_U, *shm_refframe_V;
-  uint8_t *shm_predicted_Y, *shm_predicted_U, *shm_predicted_V;
-  struct macroblock *shm_mbs_Y, *shm_mbs_U, *shm_mbs_V;
-  int16_t *residuals_Y, *residuals_U, *residuals_V;
-
-  // preemptively reading
-  uint8_t *shm_next_Y, *shm_next_U, *shm_next_V;
-  uint8_t *shm_next_predicted_Y, *shm_next_predicted_U, *shm_next_predicted_V;
-  // writing in the background
-  struct macroblock *shm_prev_mbs_Y, *shm_prev_mbs_U, *shm_prev_mbs_V;
-  int16_t *prev_residuals_Y, *prev_residuals_U, *prev_residuals_V;
-
-#ifdef __CUDACC__ // CUDA contexts
-  cudaStream_t stream_estimate_Y, stream_estimate_U, stream_estimate_V;
-  cudaStream_t stream_compensate_Y, stream_compensate_U, stream_compensate_V;
-
-  cudaStream_t stream_dct_Y, stream_dct_U, stream_dct_V;
-  cudaStream_t stream_idct_Y, stream_idct_U, stream_idct_V;
-
-  cudaEvent_t event_estimate_Y, event_estimate_U, event_estimate_V;
-  cudaEvent_t event_compensate_Y, event_compensate_U, event_compensate_V;
-#endif
-};
 
 struct c63_common
 {
-  int width, height;
+  volatile int width, height;
   int ypw, yph, upw, uph, vpw, vph;
 
   int padw[COLOR_COMPONENTS], padh[COLOR_COMPONENTS];
@@ -139,38 +113,10 @@ struct c63_common
 
   uint8_t quanttbl[COLOR_COMPONENTS][64];
 
-  struct frame *refframe;
-  struct frame *curframe;
-  struct frame *nextframe;
-
-  int framenum;
-
   int keyframe_interval;
   int frames_since_keyframe;
 
   struct entropy_ctx e_ctx;
-  struct c63_pipeline *pipe;
-
-  int pthreads_run;
-  int pthreads_luma_threads, pthreads_chroma_threads;
-
-  //pthread_t pth_dct_idct[COLOR_COMPONENTS];
-  uint32_t        pth_next_row[TASK_POOLS];      // task counters
-  pthread_mutex_t pth_mutex_next_row[TASK_POOLS];
-
-  pthread_barrier_t pth_barrier_dct_idct_start;
-  pthread_barrier_t pth_barrier_dct_idct_end;
-
-  pthread_barrier_t pth_barrier_idct_start;
-  pthread_barrier_t pth_barrier_idct_end;
-
-  //pthread_t pth_write_frame;
-  pthread_mutex_t pth_mutex_write_frame;
-  pthread_cond_t pth_cond_write_frame;
-  int pth_pending_write_frame;
-  int pth_done_write_frame;
-
-  struct frame *unwritten_frame;
 };
 
 #endif  /* C63_C63_H_ */

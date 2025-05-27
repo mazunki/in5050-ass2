@@ -10,6 +10,7 @@
 
 #include "c63.h"
 #include "c63_write.h"
+#include "c63enc.h"
 #include "quantdct.h"
 #include "common.h"
 #include "io.h"
@@ -21,12 +22,12 @@
 static int pthread_total_threads;
 static pthread_t *threads;
 static int dirty = 1;
-void cleanup_cm(void) {
-  if (!dirty) return;
-  for (int i=0; i < pthread_total_threads; i++) {
-    pthread_cancel(threads[i]);
-  }
-}
+// void cleanup_cm(void) {
+//   if (!dirty) return;
+//   for (int i=0; i < pthread_total_threads; i++) {
+//     pthread_cancel(threads[i]);
+//   }
+// }
 
 
 /* Decode VLC token */
@@ -343,15 +344,6 @@ void parse_sof0(struct c63_common *cm)
     cm->chroma_size = cm->upw * cm->uph;
     cm->num_mbs_luma = cm->mb_rows_luma * cm->mb_cols_luma;
     cm->num_mbs_chroma = cm->mb_rows_chroma * cm->mb_cols_chroma;
-
-    cm->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
-
-    cm->curframe = create_frame(cm, FRAME_CUR);
-    cm->nextframe = create_frame(cm, FRAME_NEXT);
-    cm->refframe = NULL;
-
-    c63_initialize_constant_values(cm);
-    initialize_dctlookup_values();
   }
 
   /* Advance to next frame */
@@ -430,8 +422,10 @@ int parse_c63_frame(struct c63_common *cm)
   return 1;
 }
 
-void decode_c63_frame(struct c63_common *cm, FILE *fout)
+void decode_c63_frame(struct c63_encoder *enc, FILE *fout)
 {
+  struct c63_common *cm = enc->cm;
+
   startTrace2("Decode image");
   if (!cm->curframe->keyframe) {
     CUDA_ASSERT(cudaDeviceSynchronize());
@@ -443,7 +437,7 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
      */
 
     startTrace3("Motion compensation");
-    c63_motion_compensate(cm);
+    c63_motion_compensate(enc);
     endTrace3();
     CUDA_ASSERT(cudaDeviceSynchronize());
   }
@@ -457,8 +451,8 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
     */
   startTrace2("dequantize");
 
-  pthread_barrier_wait(&cm->pth_barrier_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_idct_end);
+  pthread_barrier_wait(&enc->pth_barrier_idct_start);
+  pthread_barrier_wait(&enc->pth_barrier_idct_end);
 
   endTrace2();
 
@@ -514,42 +508,53 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  c63_common *cm = (c63_common*)calloc(1, sizeof(*cm));
+  c63_common *cm = (c63_common*) calloc(1, sizeof(*cm));
   cm->e_ctx.fp = fin;
 
   parse_c63_frame(cm); // initializes c63_common
   rewind(fin);
 
-  cm->pthreads_run = 1;
-  cm->pthreads_luma_threads = 4;
-  cm->pthreads_chroma_threads = 2;
+  c63_encoder *enc = c63_encoder_init(cm);
+
+  // enc->pipe = c63_pipeline_init(cm->luma_size, cm->chroma_size, cm->num_mbs_luma, cm->num_mbs_chroma);
+
+  cm->curframe = create_frame(enc->pipe, FRAME_CUR);
+  cm->nextframe = create_frame(enc->pipe, FRAME_NEXT);
+  cm->refframe = NULL;
+
+  c63_initialize_constant_values(cm);
+  initialize_dctlookup_values();
+
+  enc->pthreads_run = 1;
+  enc->pthreads_luma_threads = 4;
+  enc->pthreads_chroma_threads = 2;
 
 
   for (int c = 0; c < TASK_POOLS; ++c) {
-    cm->pth_next_row[c] = 0;
-    pthread_mutex_init(&cm->pth_mutex_next_row[c], NULL);
+    enc->pth_next_row[c] = 0;
+    pthread_mutex_init(&enc->pth_mutex_next_row[c], NULL);
   }
 
-  int nworkers = cm->pthreads_luma_threads + cm->pthreads_chroma_threads;
+  int nworkers = enc->pthreads_luma_threads + enc->pthreads_chroma_threads;
   pthread_total_threads = nworkers + 1; // workers + writer
 
   threads = (pthread_t *) calloc(pthread_total_threads, sizeof(pthread_t));
 
   // +1 for main thread
-  pthread_barrier_init(&cm->pth_barrier_idct_start, NULL, nworkers + 1);  // +1 for main thread
-  pthread_barrier_init(&cm->pth_barrier_idct_end, NULL, nworkers + 1);
+  pthread_barrier_init(&enc->pth_barrier_idct_start, NULL, nworkers + 1);  // +1 for main thread
+  pthread_barrier_init(&enc->pth_barrier_idct_end, NULL, nworkers + 1);
 
   struct worker_ctx *ctx = (struct worker_ctx *) malloc(nworkers*sizeof(struct worker_ctx));
 
   int t = 0;
-  for (int i = 0; i < cm->pthreads_luma_threads; ++i, ++t) {
-    ctx[t].cm = cm;
+  for (int i = 0; i < enc->pthreads_luma_threads; ++i, ++t) {
+    ctx[t].enc = enc;
     ctx[t].component = TASK_LUMA;
     pthread_create(&threads[t], NULL, pthread_idct, &ctx[t]);
   }
 
-  for (int i = 0; i < cm->pthreads_chroma_threads; ++i, ++t) {
-    ctx[t].cm = cm;
+  for (int i = 0; i < enc->pthreads_chroma_threads; ++i, ++t) {
+    ctx[t].enc->cm = cm;
     ctx[t].component = TASK_CHROMA;
     pthread_create(&threads[t], NULL, pthread_idct, &ctx[t]);
   }
@@ -578,7 +583,7 @@ int main(int argc, char **argv)
      * @param[in]  fin
      * @param[out] curframe->mbs
      */
-    decode_c63_frame(cm, fout);
+    decode_c63_frame(enc, fout);
 
     endTrace1();
 
@@ -587,20 +592,20 @@ int main(int argc, char **argv)
     }
   }
 
-  cm->pthreads_run = 0;
+  enc->pthreads_run = 0;
 
   // trigger final round for clean exit
-  pthread_barrier_wait(&cm->pth_barrier_idct_start);
-  pthread_barrier_wait(&cm->pth_barrier_idct_end);
+  pthread_barrier_wait(&enc->pth_barrier_idct_start);
+  pthread_barrier_wait(&enc->pth_barrier_idct_end);
 
   for (int i = 0; i < pthread_total_threads; i++) {
     pthread_join(threads[i], NULL);
   }
 
-  pthread_barrier_destroy(&cm->pth_barrier_idct_start);
-  pthread_barrier_destroy(&cm->pth_barrier_idct_end);
+  pthread_barrier_destroy(&enc->pth_barrier_idct_start);
+  pthread_barrier_destroy(&enc->pth_barrier_idct_end);
 
-  c63_pipeline_free(cm->pipe);
+  c63_pipeline_free(enc->pipe);
   free(cm);
 
   fclose(fin);

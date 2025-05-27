@@ -14,7 +14,8 @@ REPORT_FILE="report.nsys-rep"
 # BUILDER="${BUILDER:-${PROJECT_USER}@in5050}"
 # RUNNER="${RUNNER:-${PROJECT_USER}@in5050-2016-10}"
 BUILDER="${BUILDER:-${PROJECT_USER}@tegra-3}"
-RUNNER="${RUNNER:-${PROJECT_USER}@tegra-3}"
+COMPRUNNER="${RUNNER:-${PROJECT_USER}@tegra-3}"
+IORUNNER="${RUNNER:-${PROJECT_USER}@in5050-2016-10}"
 BUILD_MODE="${BUILD_MODE:-Debug}"
 TRACE_LEVEL="${TRACE_LEVEL:-4}"
 
@@ -30,18 +31,26 @@ VID_FLAGS="$@"
 cd "$(dirname "$0")"
 
 builder() {
-	echo "[BUILDER] $*"
+	echo "[BUILDER] $*" >&2
 	ssh "$BUILDER" "$*"
 }
 
-runner() {
-	echo "[RUNNER] $*"
-	ssh "$RUNNER" "$*"
+iorunner() {
+	echo "[IO] $*" >&2
+	ssh "$IORUNNER" "$*"
 }
+
+comprunner() {
+	echo "[SERVER] $*" >&2
+	ssh "$COMPRUNNER" "$*"
+}
+
+TEGRA_NODE=$(builder /opt/DIS/sbin/disinfo get-nodeid -hostname "${COMPRUNNER#*@}")
+PC_NODE=$(builder /opt/DIS/sbin/disinfo get-nodeid -hostname "${IORUNNER#*@}")
 
 pipeline() {
 	echo "[PIPELINE] Updating build server..."
-	runner "mkdir -p '${WORKDIR}'"
+	iorunner "mkdir -p '${WORKDIR}'"
 	(set -x; rsync -av --progress . "${BUILDER}:${PROJECT_ROOT}/")
 
 	echo "[PIPELINE] updating cmake..."
@@ -50,35 +59,38 @@ pipeline() {
 	echo "[PIPELINE] building project..."
 	builder "cd '${BUILD_DIR}' && make"
 
-	runner "mkdir -p '${WORKDIR}'"
-	if [ ! "${RUNNER}" = "${BUILDER}" ]; then
+	iorunner "mkdir -p '${WORKDIR}'"
+	if [ ! "${IORUNNER}" = "${BUILDER}" ]; then
 	  echo "[PIPELINE] syncing build machine with gpu machine..."
-	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${BUILD_DIR}/' '${RUNNER}:${BUILD_DIR}/'")
-	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${SRC_DIR}/' '${RUNNER}:${SRC_DIR}/'")
+	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${BUILD_DIR}/' '${IORUNNER}:${BUILD_DIR}/'")
+	  (set -x; ssh "${BUILDER}" "rsync -av --progress '${SRC_DIR}/' '${IORUNNER}:${SRC_DIR}/'")
 	fi
 
 	echo "[PIPELINE] running profiling on gpu machine..."
 	echo "[PIPELINE] wiping workdir..."
-	runner "rm -rf '${WORKDIR}'"
-	runner "mkdir -p '${WORKDIR}'"
+	iorunner "rm -rf '${WORKDIR}'"
+	iorunner "mkdir -p '${WORKDIR}'"
 
 
-	cmd_enc="${BUILD_DIR}/c63client -h '${VID_HEIGHT}' -w '${VID_WIDTH}' ${VID_FLAGS} -o '${VID_OUTPUT_ENC}' '${VID_INPUT}'"
+	cmd_srv="${BUILD_DIR}/c63server -r '${PC_NODE}'"
+	cmd_enc="${BUILD_DIR}/c63client -r '${TEGRA_NODE}' -h '${VID_HEIGHT}' -w '${VID_WIDTH}' ${VID_FLAGS} -o '${VID_OUTPUT_ENC}' '${VID_INPUT}'"
 	cmd_dec="${BUILD_DIR}/c63dec '${VID_OUTPUT_ENC}' '${VID_OUTPUT_DEC}'"
 	echo ${cmd_dec}
 
+	echo "[PIPELINE] server..."
+	comprunner "cd '${WORKDIR}' && ${cmd_srv}" &
 
 	echo "[PIPELINE] encoding..."
-	runner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_ENC}' ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
+	iorunner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_ENC}' ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
 	# runner "cd '${WORKDIR}' && ${cmd_enc}" || { echo "runner encoder failed with errno $?"; exit 1; }
 
 	echo "[PIPELINE] decoding..."
-	runner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_DEC}' ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }
-	# runner "cd '${WORKDIR}' && ${cmd_dec}" || { echo "runner decoder failed with errno $?"; exit 2; }
+	# runner "cd '${WORKDIR}' && nsys profile --trace=cuda,nvtx --output '${REPORT_FILE_DEC}' ${cmd_dec}" || { echo "runner decoder failed with errno $?"; true; }
+	iorunner "cd '${WORKDIR}' && ${cmd_dec}" || { echo "runner decoder failed with errno $?"; exit 2; }
 
 	echo "[PIPELINE] fetching profiling report..."
   (set -x; rm -r ../workdir || true)
-	(set -x; rsync -av --progress "$RUNNER:$WORKDIR/" "../workdir/")
+	(set -x; rsync -av --progress "$IORUNNER:$WORKDIR/" "../workdir/")
 }
 
 

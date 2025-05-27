@@ -12,6 +12,7 @@
 #include "common.h"
 #include "io.h"
 #include "tables.h"
+#include "c63enc.h"
 
 #include "profiling.h"
 
@@ -360,25 +361,25 @@ void write_frame(struct c63_common *cm, struct frame *f)
 }
 
 void *pthread_write_frame(void *ptr) {
-  struct c63_common *cm = (struct c63_common *) ptr;
+  struct c63_encoder *enc = (struct c63_encoder *) ptr;
 
   do {
-    pthread_mutex_lock(&cm->pth_mutex_write_frame);
-    pthread_cond_wait(&cm->pth_cond_write_frame, &cm->pth_mutex_write_frame);
+    pthread_mutex_lock(&enc->pth_mutex_write_frame);
+    pthread_cond_wait(&enc->pth_cond_write_frame, &enc->pth_mutex_write_frame);
 
-    if (cm->unwritten_frame == NULL) {
-      pthread_mutex_unlock(&cm->pth_mutex_write_frame);
+    if (enc->unwritten_frame == NULL) {
+      pthread_mutex_unlock(&enc->pth_mutex_write_frame);
       break;
     }
 
     startTrace4("write");
-    write_frame(cm, cm->unwritten_frame);
+    write_frame(enc->cm, enc->unwritten_frame);
     endTrace4();
 
-    cm->unwritten_frame = NULL;
+    enc->unwritten_frame = NULL;
 
-    pthread_mutex_unlock(&cm->pth_mutex_write_frame);
-  } while (cm->pthreads_run);
+    pthread_mutex_unlock(&enc->pth_mutex_write_frame);
+  } while (enc->pthreads_run);
 
   // fprintf(stderr, "pthread write_frame finished\n");
   return NULL;
