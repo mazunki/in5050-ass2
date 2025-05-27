@@ -142,9 +142,9 @@ struct c63_server* c63_server_init(uint32_t remote_node)
 
   // 7) connect & map the residual segments (server → client)
     DEBUG("c63_server_init %d", 7);
-    srv->seg_sz_residuals_data[Y_COMPONENT] = srv->cm->luma_size / 8;
-    srv->seg_sz_residuals_data[U_COMPONENT] = srv->cm->chroma_size / 8;
-    srv->seg_sz_residuals_data[V_COMPONENT] = srv->cm->chroma_size / 8;
+    srv->seg_sz_residuals_data[Y_COMPONENT] = sizeof(int16_t) * srv->cm->luma_size;
+    srv->seg_sz_residuals_data[U_COMPONENT] = sizeof(int16_t) * srv->cm->chroma_size;
+    srv->seg_sz_residuals_data[V_COMPONENT] = sizeof(int16_t) * srv->cm->chroma_size;
 
     for (int c = 0; c < COLOR_COMPONENTS; c++) {
       do {

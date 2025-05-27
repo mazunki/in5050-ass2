@@ -75,10 +75,12 @@ struct c63_client * c63_client_init(uint32_t adapter_no, uint32_t remote_node, s
   }
 
 
+  cl->seg_sz_residuals_data[Y_COMPONENT] = sizeof(int16_t) * cm->luma_size;
+  cl->seg_sz_residuals_data[U_COMPONENT] = sizeof(int16_t) * cm->chroma_size;
+  cl->seg_sz_residuals_data[V_COMPONENT] = sizeof(int16_t) * cm->chroma_size;
+
   for (int c = 0; c < COLOR_COMPONENTS; c++) {
     /* residuals segment for server → client */
-    cl->seg_sz_residuals_data[c] = (c == Y_COMPONENT) ? (cm->luma_size  / 8) : (cm->chroma_size / 8);
-
     SCICreateSegment(cl->v_dev, &cl->seg_in_residuals_data[c], DCT_SEG_ID + c, cl->seg_sz_residuals_data[c], NO_CALLBACK, NO_CALLBACK_ARGS, NO_FLAGS, &err);
     SISCI_ASSERT();
 
@@ -183,6 +185,14 @@ void c63_client_process_frame(struct c63_client *cl, uint32_t frameno)
 void c63_client_end_frame(struct c63_client *cl, uint32_t frameno)
 {
   DEBUG("c63_client_end_frame 1: %d", frameno);
+  for (int c = 0; c < COLOR_COMPONENTS; c++) {
+    memcpy(cl->curframe->mbs[c], cl->mbs[c], cl->seg_sz_mbs_data[c]);
+  }
+
+  memcpy(cl->curframe->residuals->Ydct, cl->residuals[Y_COMPONENT], cl->seg_sz_residuals_data[Y_COMPONENT]);
+  memcpy(cl->curframe->residuals->Udct, cl->residuals[U_COMPONENT], cl->seg_sz_residuals_data[U_COMPONENT]);
+  memcpy(cl->curframe->residuals->Vdct, cl->residuals[V_COMPONENT], cl->seg_sz_residuals_data[V_COMPONENT]);
+
   /* pull MBs & residuals from cl->mbs[] and cl->residuals[] */
   write_frame(cl->cm, cl->curframe);
 
